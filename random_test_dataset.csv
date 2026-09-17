@@ -1,0 +1,251 @@
+customer_id,tenure,monthly_charges,contract,payment_method,churn
+CUST_0000,52,63.43943655104287,Month-to-month,Bank transfer,Churn
+CUST_0001,15,55.00784076946757,Month-to-month,Electronic check,Churn
+CUST_0002,61,84.51033620305648,Month-to-month,Electronic check,Retain
+CUST_0003,21,86.89240596630997,Two year,Electronic check,Retain
+CUST_0004,24,106.4167565071903,One year,Bank transfer,Churn
+CUST_0005,3,43.01852682415553,Month-to-month,Bank transfer,Churn
+CUST_0006,22,69.91933798847523,One year,Mailed check,Churn
+CUST_0007,53,77.2004199209183,Two year,Mailed check,Retain
+CUST_0008,2,96.8554014306309,Two year,Mailed check,Churn
+CUST_0009,30,24.360377175443375,Month-to-month,Electronic check,Churn
+CUST_0010,38,119.4550510797341,Month-to-month,Electronic check,Churn
+CUST_0011,2,66.99445139909429,Month-to-month,Mailed check,Churn
+CUST_0012,64,47.95603417967586,Month-to-month,Electronic check,Churn
+CUST_0013,60,108.3494022266259,Month-to-month,Mailed check,Churn
+CUST_0014,21,94.77187738974139,One year,Bank transfer,Churn
+CUST_0015,33,115.30718470239532,Month-to-month,Mailed check,Churn
+CUST_0016,58,53.07503046705137,Month-to-month,Bank transfer,Retain
+CUST_0017,22,75.276496683549,Month-to-month,Electronic check,Retain
+CUST_0018,49,77.22924691708383,Month-to-month,Mailed check,Churn
+CUST_0019,59,118.03315837160457,Month-to-month,Electronic check,Churn
+CUST_0020,42,27.53462560061282,Month-to-month,Bank transfer,Retain
+CUST_0021,60,50.56970192871819,Month-to-month,Bank transfer,Retain
+CUST_0022,15,39.0911031150346,Month-to-month,Bank transfer,Churn
+CUST_0023,62,46.847485689015684,Month-to-month,Electronic check,Retain
+CUST_0024,62,68.52798742763157,One year,Electronic check,Retain
+CUST_0025,47,57.26868670940493,Month-to-month,Electronic check,Retain
+CUST_0026,62,59.46914668094722,Month-to-month,Electronic check,Retain
+CUST_0027,51,104.42131407263113,Month-to-month,Bank transfer,Churn
+CUST_0028,55,113.00168348108319,Two year,Bank transfer,Retain
+CUST_0029,64,27.041613084954392,Month-to-month,Mailed check,Retain
+CUST_0030,3,40.89187176153602,One year,Mailed check,Churn
+CUST_0031,51,87.11435168240506,Two year,Electronic check,Retain
+CUST_0032,7,55.86467812961639,Month-to-month,Bank transfer,Churn
+CUST_0033,21,45.416364906973875,Two year,Bank transfer,Retain
+CUST_0034,39,49.52905884189387,One year,Bank transfer,Retain
+CUST_0035,18,52.255076423860054,Month-to-month,Mailed check,Churn
+CUST_0036,4,104.86697949246744,Month-to-month,Mailed check,Churn
+CUST_0037,60,33.66213314420288,One year,Bank transfer,Retain
+CUST_0038,14,90.89109969101186,Month-to-month,Bank transfer,Churn
+CUST_0039,9,75.28199769079077,Two year,Bank transfer,Churn
+CUST_0040,53,49.65101436477985,Month-to-month,Mailed check,Churn
+CUST_0041,2,61.97808564462765,One year,Bank transfer,Churn
+CUST_0042,60,45.62069435944581,Month-to-month,Bank transfer,Retain
+CUST_0043,71,81.15137108656805,Two year,Electronic check,Retain
+CUST_0044,44,28.159418040024036,One year,Electronic check,Retain
+CUST_0045,8,20.51848627739868,Month-to-month,Mailed check,Churn
+CUST_0046,47,82.78944149486361,Month-to-month,Bank transfer,Churn
+CUST_0047,35,39.427395351204225,Month-to-month,Bank transfer,Churn
+CUST_0048,36,27.094091699992767,Month-to-month,Electronic check,Retain
+CUST_0049,50,59.678382721388836,Month-to-month,Mailed check,Churn
+CUST_0050,4,25.076853103939694,One year,Electronic check,Retain
+CUST_0051,2,108.66171489506598,One year,Electronic check,Churn
+CUST_0052,6,22.76167718737047,One year,Electronic check,Retain
+CUST_0053,54,77.88648955075587,Two year,Electronic check,Retain
+CUST_0054,4,63.847412301808696,One year,Bank transfer,Retain
+CUST_0055,54,87.20261352951994,One year,Bank transfer,Churn
+CUST_0056,63,52.815266747473196,One year,Electronic check,Churn
+CUST_0057,18,35.504161672774416,Month-to-month,Mailed check,Churn
+CUST_0058,44,118.1840888310531,Month-to-month,Mailed check,Retain
+CUST_0059,34,103.89335020693633,Month-to-month,Mailed check,Retain
+CUST_0060,62,106.04046183116752,Month-to-month,Mailed check,Retain
+CUST_0061,14,45.0251360515864,Month-to-month,Electronic check,Churn
+CUST_0062,48,23.88347344294232,Month-to-month,Bank transfer,Retain
+CUST_0063,15,50.32655146732228,Two year,Mailed check,Churn
+CUST_0064,62,73.70824271966555,One year,Electronic check,Retain
+CUST_0065,40,52.665124179604085,Month-to-month,Mailed check,Churn
+CUST_0066,53,102.78690037875887,Month-to-month,Mailed check,Churn
+CUST_0067,24,47.15429158197419,Month-to-month,Electronic check,Churn
+CUST_0068,26,116.52518303907698,Month-to-month,Bank transfer,Churn
+CUST_0069,60,65.72651616137286,Month-to-month,Bank transfer,Churn
+CUST_0070,41,104.20230750119813,Two year,Electronic check,Retain
+CUST_0071,29,39.4380033994873,Month-to-month,Bank transfer,Churn
+CUST_0072,15,61.13539050566786,Two year,Electronic check,Churn
+CUST_0073,45,89.95122107671938,Two year,Electronic check,Churn
+CUST_0074,65,33.83530924178014,Month-to-month,Electronic check,Retain
+CUST_0075,71,33.27454222429698,One year,Bank transfer,Retain
+CUST_0076,9,116.9536867114159,One year,Electronic check,Churn
+CUST_0077,1,91.4595104179952,Month-to-month,Mailed check,Churn
+CUST_0078,8,24.106751676787578,Month-to-month,Bank transfer,Churn
+CUST_0079,63,59.882090144479456,One year,Bank transfer,Retain
+CUST_0080,11,63.352073758074205,One year,Bank transfer,Churn
+CUST_0081,8,94.40426429991153,Two year,Bank transfer,Churn
+CUST_0082,35,45.08605273466612,Two year,Mailed check,Retain
+CUST_0083,35,38.43336743313701,One year,Bank transfer,Retain
+CUST_0084,33,28.08729666171977,Two year,Bank transfer,Retain
+CUST_0085,5,62.831447494010774,One year,Electronic check,Churn
+CUST_0086,41,88.84999007653664,One year,Bank transfer,Churn
+CUST_0087,28,25.81935955084436,One year,Mailed check,Retain
+CUST_0088,7,111.52137276264804,Month-to-month,Mailed check,Churn
+CUST_0089,12,64.23522297311044,One year,Mailed check,Churn
+CUST_0090,34,43.97873591574032,One year,Mailed check,Retain
+CUST_0091,33,29.387329008129175,Month-to-month,Bank transfer,Churn
+CUST_0092,48,38.286599710730734,Two year,Bank transfer,Retain
+CUST_0093,23,113.46139973397098,Month-to-month,Mailed check,Churn
+CUST_0094,62,83.82705938433503,One year,Mailed check,Churn
+CUST_0095,37,71.66962574265666,One year,Bank transfer,Retain
+CUST_0096,44,85.71113285001668,One year,Mailed check,Retain
+CUST_0097,35,63.56728986778911,Month-to-month,Electronic check,Retain
+CUST_0098,65,93.00393165618185,Two year,Mailed check,Retain
+CUST_0099,47,24.77161276916488,One year,Mailed check,Retain
+CUST_0100,3,76.60372104940762,Month-to-month,Electronic check,Churn
+CUST_0101,1,35.86464476424911,Month-to-month,Electronic check,Retain
+CUST_0102,5,32.01646478056422,One year,Bank transfer,Retain
+CUST_0103,14,54.187966671640154,Month-to-month,Bank transfer,Churn
+CUST_0104,27,29.179906581344188,Month-to-month,Electronic check,Retain
+CUST_0105,9,29.415698826856012,One year,Electronic check,Churn
+CUST_0106,15,51.14133093912942,Month-to-month,Bank transfer,Churn
+CUST_0107,42,117.95105286215086,One year,Mailed check,Retain
+CUST_0108,51,37.533026988933855,Month-to-month,Electronic check,Churn
+CUST_0109,63,21.716110183175022,One year,Bank transfer,Retain
+CUST_0110,52,96.3364423003911,Month-to-month,Mailed check,Churn
+CUST_0111,4,100.69129770507794,One year,Electronic check,Churn
+CUST_0112,23,54.63043210894008,Month-to-month,Mailed check,Churn
+CUST_0113,15,66.46738129396114,One year,Bank transfer,Retain
+CUST_0114,43,84.97736826427634,Month-to-month,Electronic check,Retain
+CUST_0115,29,24.805892419703373,Two year,Mailed check,Retain
+CUST_0116,36,114.9145731591386,One year,Electronic check,Churn
+CUST_0117,13,108.66803872980475,Two year,Mailed check,Churn
+CUST_0118,32,46.0893623341714,One year,Bank transfer,Retain
+CUST_0119,71,21.530454029038474,Month-to-month,Bank transfer,Retain
+CUST_0120,59,113.3436308079483,Two year,Electronic check,Retain
+CUST_0121,28,70.10398839152592,Month-to-month,Mailed check,Churn
+CUST_0122,66,73.93774484000625,Month-to-month,Electronic check,Retain
+CUST_0123,42,88.3963769398141,Month-to-month,Electronic check,Retain
+CUST_0124,45,81.58511643899138,One year,Mailed check,Churn
+CUST_0125,62,114.38916045607571,One year,Mailed check,Retain
+CUST_0126,57,114.42515971251673,Month-to-month,Mailed check,Retain
+CUST_0127,6,106.71989335550037,Two year,Bank transfer,Churn
+CUST_0128,28,83.64035974460113,Month-to-month,Electronic check,Churn
+CUST_0129,28,100.09492946823997,Month-to-month,Electronic check,Retain
+CUST_0130,44,87.71683423829818,Month-to-month,Bank transfer,Churn
+CUST_0131,30,77.33670416719333,Month-to-month,Mailed check,Churn
+CUST_0132,62,32.85003532339102,Month-to-month,Bank transfer,Retain
+CUST_0133,62,101.1204176736003,One year,Bank transfer,Retain
+CUST_0134,1,102.06394757439554,One year,Bank transfer,Retain
+CUST_0135,27,82.59396701015729,Month-to-month,Electronic check,Retain
+CUST_0136,62,102.0426843771268,Month-to-month,Bank transfer,Churn
+CUST_0137,3,85.1484771857788,Month-to-month,Electronic check,Churn
+CUST_0138,70,40.66843598767454,Two year,Electronic check,Retain
+CUST_0139,27,47.39611273211338,Month-to-month,Electronic check,Churn
+CUST_0140,9,41.45891197083741,One year,Mailed check,Retain
+CUST_0141,62,57.725908322797586,Two year,Electronic check,Churn
+CUST_0142,37,23.896313231023363,One year,Electronic check,Retain
+CUST_0143,51,81.82538843378929,Two year,Mailed check,Churn
+CUST_0144,44,53.65542148887265,Month-to-month,Electronic check,Churn
+CUST_0145,24,85.57226353807421,One year,Bank transfer,Churn
+CUST_0146,59,58.539662096556505,One year,Bank transfer,Retain
+CUST_0147,32,88.16136689727898,One year,Electronic check,Churn
+CUST_0148,52,54.062456946424,Month-to-month,Mailed check,Retain
+CUST_0149,62,46.06945282359031,Month-to-month,Bank transfer,Churn
+CUST_0150,58,69.60374542934062,Month-to-month,Mailed check,Churn
+CUST_0151,52,89.28903586919394,One year,Mailed check,Retain
+CUST_0152,12,54.83366044531974,Two year,Bank transfer,Retain
+CUST_0153,39,113.66481518557073,One year,Mailed check,Churn
+CUST_0154,2,23.918632667564626,Month-to-month,Bank transfer,Churn
+CUST_0155,3,61.794603171557874,Two year,Mailed check,Retain
+CUST_0156,56,116.75805515202475,Month-to-month,Bank transfer,Churn
+CUST_0157,59,74.79718832480873,Month-to-month,Electronic check,Churn
+CUST_0158,2,62.347094230811855,Month-to-month,Bank transfer,Churn
+CUST_0159,2,76.85202837499583,One year,Bank transfer,Retain
+CUST_0160,54,77.59245752580847,Month-to-month,Bank transfer,Churn
+CUST_0161,1,93.16477552996402,One year,Bank transfer,Churn
+CUST_0162,19,32.76897294224656,Two year,Mailed check,Retain
+CUST_0163,2,45.00164492161046,Month-to-month,Electronic check,Retain
+CUST_0164,53,78.05440123439098,One year,Bank transfer,Retain
+CUST_0165,44,106.7116607209722,Month-to-month,Mailed check,Retain
+CUST_0166,32,76.18666921437736,Month-to-month,Electronic check,Churn
+CUST_0167,70,43.85968597903402,Month-to-month,Electronic check,Retain
+CUST_0168,32,87.98447799002459,Month-to-month,Electronic check,Churn
+CUST_0169,68,93.99087604473745,One year,Electronic check,Retain
+CUST_0170,55,43.82361524039794,Month-to-month,Bank transfer,Retain
+CUST_0171,56,57.772888617629484,One year,Bank transfer,Retain
+CUST_0172,17,73.43274735305634,One year,Mailed check,Retain
+CUST_0173,38,69.65611906830776,One year,Mailed check,Retain
+CUST_0174,24,58.96180862192035,One year,Mailed check,Churn
+CUST_0175,69,49.76351745093109,One year,Electronic check,Retain
+CUST_0176,70,29.998488716186337,Month-to-month,Electronic check,Retain
+CUST_0177,11,25.34852967473689,Month-to-month,Bank transfer,Churn
+CUST_0178,16,115.85414968831984,Two year,Electronic check,Churn
+CUST_0179,59,104.71431440955898,One year,Electronic check,Churn
+CUST_0180,70,55.49051904627206,Month-to-month,Electronic check,Retain
+CUST_0181,3,115.68008851264564,Month-to-month,Mailed check,Churn
+CUST_0182,20,87.67699044243032,Month-to-month,Mailed check,Churn
+CUST_0183,59,68.25209496426424,Two year,Bank transfer,Churn
+CUST_0184,36,69.30256577718049,Month-to-month,Electronic check,Churn
+CUST_0185,19,28.328441119525962,Month-to-month,Electronic check,Retain
+CUST_0186,67,29.170414725848108,Month-to-month,Bank transfer,Retain
+CUST_0187,19,80.2440925901119,Month-to-month,Electronic check,Churn
+CUST_0188,20,75.37030523458007,Two year,Electronic check,Retain
+CUST_0189,71,41.272789502422896,Month-to-month,Mailed check,Retain
+CUST_0190,52,114.61945428816902,Two year,Bank transfer,Retain
+CUST_0191,33,98.12960504712025,Month-to-month,Bank transfer,Churn
+CUST_0192,40,31.3464602017448,Two year,Bank transfer,Churn
+CUST_0193,39,113.09291056872925,Month-to-month,Bank transfer,Churn
+CUST_0194,1,117.42482085344102,Month-to-month,Mailed check,Churn
+CUST_0195,11,119.59312420303291,One year,Mailed check,Retain
+CUST_0196,57,25.587115467735003,Two year,Electronic check,Retain
+CUST_0197,50,93.70355567910089,Two year,Electronic check,Retain
+CUST_0198,23,74.59157701649889,One year,Electronic check,Churn
+CUST_0199,31,90.58314838786946,Two year,Electronic check,Retain
+CUST_0200,42,116.86519439741349,Month-to-month,Mailed check,Churn
+CUST_0201,7,88.8030010175039,Two year,Bank transfer,Retain
+CUST_0202,16,103.69638742373738,Month-to-month,Mailed check,Churn
+CUST_0203,60,106.68687053108414,One year,Electronic check,Retain
+CUST_0204,2,103.84807637639851,Two year,Mailed check,Churn
+CUST_0205,1,62.609147504694114,One year,Bank transfer,Churn
+CUST_0206,48,42.25764175710305,One year,Bank transfer,Retain
+CUST_0207,12,59.66516019542519,Month-to-month,Mailed check,Churn
+CUST_0208,69,109.18969087767766,Two year,Mailed check,Churn
+CUST_0209,37,34.66048216920255,Month-to-month,Mailed check,Retain
+CUST_0210,32,71.33261686923929,Two year,Electronic check,Churn
+CUST_0211,9,43.32280724245278,One year,Mailed check,Churn
+CUST_0212,19,78.13054172267823,Month-to-month,Mailed check,Retain
+CUST_0213,48,106.31385219890039,One year,Mailed check,Retain
+CUST_0214,3,108.03599686384167,One year,Bank transfer,Retain
+CUST_0215,20,43.668519368207875,One year,Bank transfer,Retain
+CUST_0216,24,110.76937063485462,One year,Electronic check,Churn
+CUST_0217,54,79.18887388212843,Month-to-month,Electronic check,Churn
+CUST_0218,33,55.02182467003136,One year,Bank transfer,Retain
+CUST_0219,24,90.81811955831998,Two year,Bank transfer,Churn
+CUST_0220,36,68.16669879641154,Month-to-month,Bank transfer,Churn
+CUST_0221,38,57.798759012225446,One year,Mailed check,Retain
+CUST_0222,25,90.50843642966599,Month-to-month,Mailed check,Churn
+CUST_0223,18,44.8724154430288,Month-to-month,Bank transfer,Churn
+CUST_0224,66,53.02525290190985,One year,Mailed check,Retain
+CUST_0225,54,63.445184448827135,One year,Mailed check,Retain
+CUST_0226,35,45.36821738731388,Month-to-month,Electronic check,Retain
+CUST_0227,61,60.520208678141714,One year,Bank transfer,Churn
+CUST_0228,41,77.14730252050106,Month-to-month,Bank transfer,Retain
+CUST_0229,33,94.09738609106682,Month-to-month,Mailed check,Churn
+CUST_0230,68,96.71948531085717,Month-to-month,Bank transfer,Churn
+CUST_0231,33,102.27903518766931,Month-to-month,Electronic check,Retain
+CUST_0232,14,94.4211656943298,Month-to-month,Electronic check,Retain
+CUST_0233,21,88.1039427096909,One year,Electronic check,Retain
+CUST_0234,48,43.75064712924699,One year,Bank transfer,Retain
+CUST_0235,20,60.02228928720248,Month-to-month,Bank transfer,Churn
+CUST_0236,8,67.77148908802278,Two year,Bank transfer,Churn
+CUST_0237,7,28.289132169335424,One year,Bank transfer,Churn
+CUST_0238,67,72.83701212972092,Month-to-month,Bank transfer,Retain
+CUST_0239,17,63.6335831606556,Two year,Electronic check,Churn
+CUST_0240,33,100.21092490267341,Two year,Mailed check,Churn
+CUST_0241,48,117.79006687542709,Month-to-month,Electronic check,Churn
+CUST_0242,59,75.60050386425846,Month-to-month,Bank transfer,Retain
+CUST_0243,22,52.268638827758366,Two year,Electronic check,Churn
+CUST_0244,30,24.340078329817274,One year,Bank transfer,Retain
+CUST_0245,38,112.4643330223596,Month-to-month,Bank transfer,Churn
+CUST_0246,51,111.91157152786595,One year,Electronic check,Churn
+CUST_0247,54,45.299016798924114,Two year,Bank transfer,Retain
+CUST_0248,8,89.54111231066476,One year,Mailed check,Churn
+CUST_0249,27,27.543454708976927,One year,Bank transfer,Retain
