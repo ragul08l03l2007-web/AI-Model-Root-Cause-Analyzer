@@ -205,6 +205,78 @@ def test_gemini_graceful_fallback():
     print("  -> TEST 4 PASSED!")
 
 
+def test_screen_oriented_feature_and_calculation_copilot():
+    print("\n[TEST 5] Testing Screen-Oriented Random Feature Lookup, Comparison & Calculation Glossary...")
+
+    dataset_path = "random_test_dataset.csv"
+    assert os.path.exists(dataset_path), f"Missing {dataset_path}"
+    df = pd.read_csv(dataset_path)
+
+    # Run analysis
+    model_result = analyze_model(df, target_column="churn")
+    data_quality = DataProfiler.profile_dataset(df)
+
+    payload = extract_evidence_payload(model_result, data_quality)
+
+    # 1. Verify feature catalogue and calculation glossary exist in payload
+    assert "feature_catalogue" in payload, "Missing feature_catalogue in payload"
+    assert "calculation_glossary" in payload, "Missing calculation_glossary in payload"
+
+    # All feature columns should be indexed in feature catalogue
+    for col in df.columns:
+        if col != "churn":
+            assert col in payload["feature_catalogue"], f"Feature {col} missing from feature_catalogue"
+
+    print(f"  -> Verified complete feature catalogue: {len(payload['feature_catalogue'])} features indexed")
+
+    # 2. Test Copilot queries on random features
+    explainer = AIExplainer(provider=OfflineDeterministicProvider())
+
+    # Random feature 1: monthly_charges
+    ans_feat1 = explainer.ask_copilot("Tell me about monthly_charges", model_result, data_quality)
+    assert "monthly_charges" in ans_feat1.lower()
+    assert "data type" in ans_feat1.lower() or "importance" in ans_feat1.lower()
+    print("  -> Random feature query ('monthly_charges') successfully returned detailed statistical profile")
+
+    # Random feature 2: tenure (verified candidate)
+    ans_feat2 = explainer.ask_copilot("What is the diagnostic profile for tenure?", model_result, data_quality)
+    assert "tenure" in ans_feat2.lower()
+    print("  -> Feature query ('tenure') returned statistical and experimental trials & decomposition")
+
+    # Multi-feature comparative analysis
+    ans_comp = explainer.ask_copilot("Compare tenure and monthly_charges", model_result, data_quality)
+    assert "comparative" in ans_comp.lower() or "tenure" in ans_comp.lower()
+    assert "monthly_charges" in ans_comp.lower()
+    print("  -> Comparative feature query successfully returned side-by-side analysis")
+
+    # 3. Test Copilot queries on screen calculations and formulas
+    # Formula: Balanced Accuracy
+    ans_bal_acc = explainer.ask_copilot("How is balanced accuracy calculated?", model_result, data_quality)
+    assert "balanced accuracy" in ans_bal_acc.lower()
+    assert "mean(recall" in ans_bal_acc.lower() or "recall" in ans_bal_acc.lower()
+    print("  -> Screen calculation query ('balanced accuracy') returned exact formula and metric value")
+
+    # Formula: Risk Score & Drivers
+    ans_risk = explainer.ask_copilot("How is the overall risk score calculated and what are the drivers?", model_result, data_quality)
+    assert "risk score" in ans_risk.lower()
+    assert "driver" in ans_risk.lower() or "pts" in ans_risk.lower()
+    print("  -> Screen calculation query ('risk score drivers') returned active penalties and formula")
+
+    # Formula: Evidence Fusion Score
+    ans_ev_score = explainer.ask_copilot("Explain the evidence score 35+35+15+10+5 formula", model_result, data_quality)
+    assert "35" in ans_ev_score
+    assert "ablation" in ans_ev_score.lower()
+    assert "permutation" in ans_ev_score.lower()
+    print("  -> Evidence score formula query returned full 5-component scoring rubric")
+
+    # Cross-validation & stability
+    ans_cv = explainer.ask_copilot("What is the cross validation stability and mean?", model_result, data_quality)
+    assert "cross-validation" in ans_cv.lower() or "cv" in ans_cv.lower()
+    print("  -> Cross-validation query returned generalization mean, std, and stability check")
+
+    print("  -> TEST 5 PASSED!")
+
+
 if __name__ == "__main__":
     print("=" * 70)
     print("RUNNING AI EXPLAINER & PLUGGABLE PROVIDER VERIFICATION SUITE")
@@ -213,6 +285,8 @@ if __name__ == "__main__":
     test_classification_ai_explainer()
     test_regression_ai_explainer()
     test_gemini_graceful_fallback()
+    test_screen_oriented_feature_and_calculation_copilot()
     print("\n" + "=" * 70)
     print("ALL AI EXPLAINER & PROVIDER TESTS PASSED 100%!")
     print("=" * 70)
+

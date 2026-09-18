@@ -405,30 +405,144 @@ class OfflineDeterministicProvider(BaseAIProvider):
         question: str,
         chat_history: Optional[List[Dict[str, str]]] = None
     ) -> str:
-        q_lower = question.lower()
+        q_lower = question.lower().strip()
         root_causes = payload.get("root_causes", [])
         metrics = payload.get("selected_model", {}).get("metrics", {})
         model_name = payload.get("selected_model", {}).get("name", "Model")
         feat_imp = payload.get("feature_importance", {})
+        feat_cat = payload.get("feature_catalogue", {})
+        calc_glossary = payload.get("calculation_glossary", {})
         task_type = payload.get("task_type", "classification")
         verif_exps = payload.get("verification_experiments", [])
         remed_sim = payload.get("remediation_simulation", {})
+        risk_info = payload.get("overall_risk", {})
+
+        # 1. Check for specific feature mentions in question
+        matched_features = []
+        for feat_name in feat_cat.keys():
+            # Check exact or normalized name match in query
+            if feat_name.lower() in q_lower or feat_name.lower().replace("_", " ") in q_lower:
+                matched_features.append(feat_name)
+
+        if matched_features:
+            lines = []
+            if len(matched_features) == 1:
+                f_name = matched_features[0]
+                f_data = feat_cat[f_name]
+                imp = f_data.get("importance", 0.0)
+                share = f_data.get("relative_share_pct", 0.0)
+                tier = f_data.get("influence_tier", "Moderate")
+                dtype = f_data.get("data_type", "unknown")
+                missing_cnt = f_data.get("missing_count", 0)
+                outliers_cnt = f_data.get("outliers_count", 0)
+                direction = f_data.get("observed_direction", "N/A")
+                verif = f_data.get("verification", {})
+
+                lines.append(f"### Diagnostic Profile for Feature: `{f_name}`")
+                lines.append(f"- **Data Type**: {dtype.capitalize()}")
+                lines.append(f"- **Model Importance**: {imp:.4f} ({share:.1f}% relative share | {tier} Influence)")
+                lines.append(f"- **Data Quality**: {missing_cnt} missing cells, {outliers_cnt} detected extreme outliers")
+                lines.append(f"- **Observed Direction / Behavior**: {direction}")
+
+                if f_data.get("is_experimentally_tested") and verif.get("verdict") != "UNTESTED":
+                    decomp = verif.get("score_decomposition", {})
+                    lines.append(f"\n**Controlled Experimental Verification Trials**:")
+                    lines.append(f"- **Diagnostic Verdict**: `{verif.get('verdict')}` (Evidence Score: {verif.get('evidence_score')}/100)")
+                    lines.append(f"  • Retrained Ablation Drop: {verif.get('ablation_delta', 0):+.4f} ({verif.get('ablation_delta_pct', 0):+.1f}% | {decomp.get('ablation_evidence_pts', decomp.get('ablation_points', 0))}/35 pts)")
+                    lines.append(f"  • Test-Time Permutation Drop: {verif.get('permutation_delta', 0):+.4f} ({verif.get('permutation_delta_pct', 0):+.1f}% | {decomp.get('permutation_evidence_pts', decomp.get('permutation_points', 0))}/35 pts)")
+                    lines.append(f"  • Control Comparison ({verif.get('control_feature', 'None')}): {verif.get('control_delta', 0):+.4f} ({decomp.get('control_specificity_pts', decomp.get('control_points', 0))}/15 pts)")
+                    lines.append(f"  • 10% σ Measurement Jitter: Flip Rate = {verif.get('prediction_flip_rate_pct', 0.0):.1f}% ({decomp.get('measurement_stability_pts', decomp.get('stability_points', 0))}/10 pts)")
+                    lines.append(f"  • Experimental Consistency: {decomp.get('experimental_consistency_pts', decomp.get('consistency_points', 0))}/5 pts")
+                else:
+                    lines.append(f"- **Experimental Status**: `UNTESTED` — No counterfactual ablation or permutation trials were required for this candidate.")
+
+                if f_data.get("subgroup_error_segments_count", 0) > 0:
+                    lines.append(f"- **Error Segments**: Feature is involved in {f_data['subgroup_error_segments_count']} subgroup error partition(s).")
+
+            else:
+                lines.append(f"### Comparative Feature Analysis: {', '.join([f'`{f}`' for f in matched_features])}")
+                for f_name in matched_features:
+                    f_data = feat_cat[f_name]
+                    verif = f_data.get("verification", {})
+                    v_str = verif.get("verdict", "UNTESTED")
+                    score_str = f"{verif.get('evidence_score')}/100" if f_data.get("is_experimentally_tested") else "N/A"
+                    lines.append(
+                        f"- **`{f_name}`**: Importance = {f_data.get('importance', 0.0):.4f} ({f_data.get('relative_share_pct', 0.0):.1f}% share) | "
+                        f"Missing = {f_data.get('missing_count', 0)} | Verdict = `{v_str}` (Evidence Score: {score_str})"
+                    )
+            return "\n".join(lines)
+
+        # 2. Check for Calculation & Formula Queries
+        if any(w in q_lower for w in ["balanced accuracy", "balanced_acc", "bal acc"]):
+            b_info = calc_glossary.get("balanced_accuracy", {})
+            val = b_info.get("value", metrics.get("balanced_accuracy"))
+            val_str = f"{val*100:.1f}% ({val:.4f})" if val is not None else "N/A"
+            return (
+                f"**Balanced Accuracy Calculation & Definition**:\n"
+                f"- **Current Value**: `{val_str}`\n"
+                f"- **Formula**: `Balanced Accuracy = mean(recall_per_class) = sum(recall_i) / n_classes`\n"
+                f"- **Why it matters**: It evaluates arithmetic mean recall across all target classes equally, avoiding optimistic bias caused by majority class size disparity."
+            )
+
+        if any(w in q_lower for w in ["risk score", "how is risk", "risk calculation", "risk driver"]):
+            r_info = calc_glossary.get("risk_score", {})
+            r_score = r_info.get("score", risk_info.get("risk_score", 0))
+            r_level = r_info.get("level", risk_info.get("risk_level", "LOW"))
+            r_drivers = r_info.get("drivers", risk_info.get("drivers", []))
+            lines = [
+                f"**Overall Risk Score Calculation ({r_score}/100 - {r_level})**:",
+                f"- **Formula**: Continuous multi-domain risk evaluation across Data Quality, Model Performance, Overfitting Gap, Class Imbalance, and Reliance Concentration.",
+                f"- **Active Risk Drivers**:"
+            ]
+            if r_drivers:
+                for d in r_drivers:
+                    lines.append(f"  • **{d.get('issue', d.get('domain', 'Driver'))}**: `+{d.get('contribution', 0)} pts` — {d.get('evidence', d.get('observed_evidence', ''))}")
+            else:
+                lines.append("  • Zero active risk driver penalties detected. The model is operating in a healthy baseline regime.")
+            return "\n".join(lines)
+
+        if any(w in q_lower for w in ["evidence score", "evidence fusion", "scoring formula", "35", "points"]):
+            return (
+                "**Evidence Fusion Scoring Formula (100 pts max)**:\n"
+                "- **Retrained Feature Ablation**: up to `35 pts` (linear scaling with relative performance drop upon removal)\n"
+                "- **Test-Time Permutation**: up to `35 pts` (linear scaling with relative performance drop upon feature disruption)\n"
+                "- **Negative Baseline Control**: up to `15 pts` (verifies specificity against a control predictor)\n"
+                "- **Measurement Stability (10% σ Jitter)**: up to `10 pts` (measures output robustness and flip rate <= 5%)\n"
+                "- **Cross-Experiment Consistency**: up to `5 pts` (awarded when both ablation and permutation confirm significant drop)\n\n"
+                "**Verdict Thresholds**:\n"
+                "- `Evidence Score >= 70/100` → **VERIFIED MODEL RELIANCE**\n"
+                "- `Evidence Score < 30/100` → **NO MEASURABLE MODEL RELIANCE**\n"
+                "- `30 <= Score < 70` → **INCONCLUSIVE**"
+            )
+
+        if any(w in q_lower for w in ["cross validation", "cv mean", "cv std", "fold", "stability"]):
+            cv_info = calc_glossary.get("cross_validation", {})
+            cv_mean = cv_info.get("cv_mean", payload.get("selected_model", {}).get("cross_validation", {}).get("cv_mean", 0.0))
+            cv_std = cv_info.get("cv_std", payload.get("selected_model", {}).get("cross_validation", {}).get("cv_std", 0.0))
+            cv_stab = cv_info.get("stability_status", "STABLE")
+            return (
+                f"**Cross-Validation & Stability Evaluation**:\n"
+                f"- **Selected Model**: {model_name}\n"
+                f"- **CV Generalization Estimate**: `{cv_mean*100:.1f}% ± {cv_std*100:.1f}%` ({cv_mean:.4f} ± {cv_std:.4f})\n"
+                f"- **Stability Status**: `{cv_stab}`\n"
+                f"- **Overfitting Check**: {payload.get('model_stability', {}).get('explanation', 'No material generalization gap detected.')}"
+            )
 
         if any(w in q_lower for w in ["ablation", "permutation", "verif", "experiment", "evidence score", "reliance", "noise", "jitter", "control"]):
             if not verif_exps:
                 return "No targeted verification experiments were conducted for this model run."
             lines = ["**Empirical Root-Cause Verification & Intervention Trials**:"]
             for exp in verif_exps:
-                cand = exp.get("candidate")
+                cand = exp.get("candidate", exp.get("candidate_feature"))
                 verdict = exp.get("verdict")
                 score = exp.get("evidence_score", 0)
                 decomp = exp.get("score_decomposition", {})
                 lines.append(f"\n- **Candidate '{cand}'** → Verdict: `{verdict}` (Evidence Score: {score}/100)")
-                lines.append(f"  • Ablation Drop: {exp.get('ablation_delta', 0):+.4f} (Score Contribution: {decomp.get('ablation_evidence_pts', 0)}/35 pts)")
-                lines.append(f"  • Permutation Drop: {exp.get('permutation_delta', 0):+.4f} (Score Contribution: {decomp.get('permutation_evidence_pts', 0)}/35 pts)")
-                lines.append(f"  • Control ({exp.get('control_feature')}): {exp.get('control_delta', 0):+.4f} (Score Contribution: {decomp.get('control_specificity_pts', 0)}/15 pts)")
-                lines.append(f"  • Measurement Stability (10% σ Jitter): Flip Rate = {exp.get('prediction_flip_rate_pct', 0.0)}% (Score Contribution: {decomp.get('measurement_stability_pts', 0)}/10 pts)")
-                lines.append(f"  • Consistency Contribution: {decomp.get('experimental_consistency_pts', 0)}/5 pts")
+                lines.append(f"  • Ablation Drop: {exp.get('ablation_delta', 0):+.4f} (Score Contribution: {decomp.get('ablation_evidence_pts', decomp.get('ablation_points', 0))}/35 pts)")
+                lines.append(f"  • Permutation Drop: {exp.get('permutation_delta', 0):+.4f} (Score Contribution: {decomp.get('permutation_evidence_pts', decomp.get('permutation_points', 0))}/35 pts)")
+                lines.append(f"  • Control ({exp.get('control_feature')}): {exp.get('control_delta', 0):+.4f} (Score Contribution: {decomp.get('control_specificity_pts', decomp.get('control_points', 0))}/15 pts)")
+                lines.append(f"  • Measurement Stability (10% σ Jitter): Flip Rate = {exp.get('prediction_flip_rate_pct', 0.0)}% (Score Contribution: {decomp.get('measurement_stability_pts', decomp.get('stability_points', 0))}/10 pts)")
+                lines.append(f"  • Consistency Contribution: {decomp.get('experimental_consistency_pts', decomp.get('consistency_points', 0))}/5 pts")
             return "\n".join(lines)
 
         elif any(w in q_lower for w in ["remediat", "simulation", "fix", "resolution", "pipeline"]):
@@ -454,12 +568,20 @@ class OfflineDeterministicProvider(BaseAIProvider):
             reasons = "\n".join([f"- **{rc.get('finding')}** (Severity: {rc.get('severity')}): {rc.get('interpretation')}" for rc in root_causes])
             return f"Based on the empirical diagnostic run, here are the root causes behind model behavior:\n\n{reasons}"
 
-        elif "feature" in q_lower or "important" in q_lower:
-            if not feat_imp:
+        elif "feature" in q_lower or "important" in q_lower or "all features" in q_lower or "dataset" in q_lower:
+            if not feat_cat and not feat_imp:
                 return "Feature importance calculation did not find strong dominant single features."
-            top_feats = list(feat_imp.items())[:5]
-            feat_text = "\n".join([f"- **{k}**: Importance score {v.get('importance', 0) if isinstance(v, dict) else v}" for k, v in top_feats])
-            return f"Top predictive features identified by the model analyzer:\n\n{feat_text}"
+            lines = ["**All Dataset Features & Diagnostic Reliance Catalogue**:"]
+            items = feat_cat.items() if feat_cat else feat_imp.items()
+            for k, v in items:
+                if isinstance(v, dict):
+                    imp = v.get("importance", 0.0)
+                    share = v.get("relative_share_pct", v.get("share_pct", 0.0))
+                    v_res = v.get("verification", {}).get("verdict", "UNTESTED")
+                    lines.append(f"- **`{k}`**: Importance = {imp:.4f} ({share:.1f}% share) | Status = `{v_res}`")
+                else:
+                    lines.append(f"- **`{k}`**: Importance = {float(v):.4f}")
+            return "\n".join(lines)
 
         elif "metric" in q_lower or "performance" in q_lower or "accuracy" in q_lower or "f1" in q_lower or "r2" in q_lower:
             metric_text = "\n".join([f"- **{k.upper()}**: {v}" for k, v in metrics.items()])
@@ -467,14 +589,19 @@ class OfflineDeterministicProvider(BaseAIProvider):
 
         else:
             verif_count = len(verif_exps)
+            tot_features = len(feat_cat) if feat_cat else len(feat_imp)
             return (
-                f"**Diagnostic Summary for {model_name}**:\n"
-                f"- Task Type: {task_type.capitalize()}\n"
-                f"- Risk Score: {payload.get('overall_risk', {}).get('risk_score', 0)}/100 ({payload.get('overall_risk', {}).get('risk_level', 'LOW')})\n"
-                f"- Active Root Causes Detected: {len(root_causes)}\n"
-                f"- Verification Experiments Conducted: {verif_count}\n"
-                f"You can ask me about ablation results, evidence score breakdowns, stability tests, or remediation resolution!"
+                f"**Screen-Aware Diagnostic Copilot for {model_name}**:\n"
+                f"- **Task Type**: {task_type.capitalize()}\n"
+                f"- **Target Column**: `{payload.get('target_profile', {}).get('target_column', 'target')}`\n"
+                f"- **Risk Score**: `{payload.get('overall_risk', {}).get('risk_score', 0)}/100` ({payload.get('overall_risk', {}).get('risk_level', 'LOW')})\n"
+                f"- **Features Tracked**: {tot_features} features indexed with full statistical profiles\n"
+                f"- **Active Root Causes**: {len(root_causes)}\n"
+                f"- **Verification Experiments**: {verif_count} candidate trial(s)\n\n"
+                f"You can question me about **any specific feature** (e.g. 'tell me about satisfaction_score'), "
+                f"screen calculations (e.g. 'how is balanced accuracy computed?'), or verification experiments!"
             )
+
 
 
 class GeminiProvider(BaseAIProvider):
@@ -667,12 +794,14 @@ class GeminiProvider(BaseAIProvider):
         chat_history: Optional[List[Dict[str, str]]] = None
     ) -> str:
         system_instruction = (
-            "You are the AI Model Diagnostic Copilot. Provide a direct, high-signal, concise response "
-            "(2-3 short bullet points max unless asked for details). Answer strictly from the provided statistical evidence and controlled experiment trials."
+            "You are the AI Model Diagnostic Copilot. Provide direct, high-signal, screen-oriented responses. "
+            "You have full access to the complete feature catalogue (every feature's importance, data quality, direction, and experimental trials) "
+            "and the calculation glossary (formulas for Balanced Accuracy, Risk Score drivers, Evidence Fusion 35+35+15+10+5, Cross-Validation, and Remediation simulation). "
+            "Answer developer questions about ANY random feature, comparative features, or calculation formulas strictly from the provided payload."
         )
 
-        # Compact context for ultra-fast generation
-        compact_context = {
+        # High-signal context with complete feature catalog and calculation glossary
+        context_payload = {
             "task_type": payload.get("task_type"),
             "target": payload.get("target_profile", {}).get("target_column"),
             "selected_model": payload.get("selected_model", {}).get("name"),
@@ -681,11 +810,12 @@ class GeminiProvider(BaseAIProvider):
             "risk_level": payload.get("overall_risk", {}).get("risk_level"),
             "top_root_causes": [
                 f"{rc.get('finding')} [{rc.get('severity')}] - {rc.get('interpretation')}"
-                for rc in payload.get("root_causes", [])[:3]
+                for rc in payload.get("root_causes", [])[:4]
             ],
-            "top_features": list(payload.get("feature_importance", {}).items())[:4],
+            "feature_catalogue": payload.get("feature_catalogue", {}),
+            "calculation_glossary": payload.get("calculation_glossary", {}),
             "completed_experiments": payload.get("completed_experiments", []),
-            "verification_experiments": payload.get("verification_experiments", [])[:3],
+            "verification_experiments": payload.get("verification_experiments", []),
             "remediation_simulation": payload.get("remediation_simulation", {})
         }
 
@@ -697,14 +827,14 @@ class GeminiProvider(BaseAIProvider):
                 history_text += f"{role.upper()}: {content}\n"
 
         prompt = (
-            f"SUMMARY EVIDENCE & VERIFICATION TRIALS:\n{json.dumps(compact_context, indent=1)}\n\n"
+            f"DIAGNOSTIC EVIDENCE & SCREEN CALCULATIONS:\n{json.dumps(context_payload, indent=1)}\n\n"
             f"{history_text}"
             f"QUESTION: {question}\n\n"
-            "Answer clearly and concisely:"
+            "Answer clearly, accurately, and concisely:"
         )
 
         try:
-            return self._call_gemini_api(prompt, system_instruction, response_json=False, max_tokens=400).strip()
+            return self._call_gemini_api(prompt, system_instruction, response_json=False, max_tokens=600).strip()
         except Exception:
             return self.fallback_provider.chat(payload, question, chat_history)
 
@@ -816,7 +946,13 @@ class OpenAICompatibleProvider(BaseAIProvider):
         question: str,
         chat_history: Optional[List[Dict[str, str]]] = None
     ) -> str:
-        messages = [{"role": "system", "content": f"Ground answers on this evidence and controlled verification trials:\n{json.dumps(payload)}"}]
+        system_instruction = (
+            "You are the AI Model Diagnostic Copilot. Provide direct, high-signal, screen-oriented responses. "
+            "You have full access to the complete feature catalogue (every feature's importance, data quality, direction, and experimental trials) "
+            "and the calculation glossary (formulas for Balanced Accuracy, Risk Score drivers, Evidence Fusion 35+35+15+10+5, Cross-Validation, and Remediation simulation). "
+            "Answer developer questions about ANY random feature, comparative features, or calculation formulas strictly from the provided payload."
+        )
+        messages = [{"role": "system", "content": f"{system_instruction}\n\nEVIDENCE PAYLOAD:\n{json.dumps(payload)}"}]
         if chat_history:
             messages.extend(chat_history[-4:])
         messages.append({"role": "user", "content": question})
@@ -893,9 +1029,14 @@ class OllamaProvider(BaseAIProvider):
         question: str,
         chat_history: Optional[List[Dict[str, str]]] = None
     ) -> str:
+        system_instruction = (
+            "You are the AI Model Diagnostic Copilot. Provide direct, high-signal, screen-oriented responses. "
+            "You have full access to the complete feature catalogue (every feature's importance, data quality, direction, and experimental trials) "
+            "and calculation formulas. Answer questions about ANY random feature or calculation strictly from the evidence payload."
+        )
         prompt = f"Evidence:\n{json.dumps(payload)}\n\nQuestion: {question}"
         try:
-            return self._generate(prompt)
+            return self._generate(prompt, system=system_instruction)
         except Exception:
             return self.fallback_provider.chat(payload, question, chat_history)
 
