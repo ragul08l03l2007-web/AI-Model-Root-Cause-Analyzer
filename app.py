@@ -1990,13 +1990,19 @@ def dashboard_page():
         CURRENT_AI_REPORT = CURRENT_AI_EXPLAINER.explain(result, quality)
     if CURRENT_FIX_SCRIPT is None:
         CURRENT_FIX_SCRIPT = CURRENT_AI_EXPLAINER.generate_fix_script(result, quality)
-    if CURRENT_VISUALIZATIONS is None:
-        CURRENT_VISUALIZATIONS = generate_all_visualizations(result)
-
-    vis = CURRENT_VISUALIZATIONS
+    
+    # Always compute evidence visualizations dynamically in real-time from the active result payload
+    vis = generate_all_visualizations(result)
+    CURRENT_VISUALIZATIONS = vis
 
     # Build interactive chart boxes
     chart_boxes = []
+    if "evidence_graph" in vis:
+        chart_boxes.append('<div class="chart-box" data-category="verif" style="grid-column: 1 / -1;"><div id="chart-evidence-graph" class="chart-container" style="min-height:420px;"></div></div>')
+    if "verification_ablation" in vis:
+        chart_boxes.append('<div class="chart-box" data-category="verif"><div id="chart-verif-ablation" class="chart-container"></div></div>')
+    if "remediation_simulation" in vis:
+        chart_boxes.append('<div class="chart-box" data-category="verif"><div id="chart-remed-sim" class="chart-container"></div></div>')
     if "risk_gauge" in vis:
         chart_boxes.append('<div class="chart-box" data-category="risk"><div id="chart-risk-gauge" class="chart-container"></div></div>')
     if "risk_breakdown" in vis:
@@ -2021,12 +2027,9 @@ def dashboard_page():
         chart_boxes.append('<div class="chart-box" data-category="errors"><div id="chart-residual-plot" class="chart-container"></div></div>')
     if "residual_distribution" in vis:
         chart_boxes.append('<div class="chart-box" data-category="errors"><div id="chart-residual-dist" class="chart-container"></div></div>')
-    if "verification_ablation" in vis:
-        chart_boxes.append('<div class="chart-box" data-category="verif"><div id="chart-verif-ablation" class="chart-container"></div></div>')
-    if "remediation_simulation" in vis:
-        chart_boxes.append('<div class="chart-box" data-category="verif"><div id="chart-remed-sim" class="chart-container"></div></div>')
 
     chart_payload_map = {
+        "chart-evidence-graph": vis.get("evidence_graph"),
         "chart-risk-gauge": vis.get("risk_gauge"),
         "chart-risk-breakdown": vis.get("risk_breakdown"),
         "chart-perf-metrics": vis.get("performance_metrics"),
@@ -2659,6 +2662,7 @@ class AppHandler(BaseHTTPRequestHandler):
         global CURRENT_AI_EXPLAINER
         global CURRENT_AI_REPORT
         global CURRENT_FIX_SCRIPT
+        global CURRENT_VISUALIZATIONS
 
         if self.path == "/api/copilot/chat":
             try:
@@ -2754,6 +2758,9 @@ class AppHandler(BaseHTTPRequestHandler):
                 CURRENT_DATA_QUALITY = None
                 CURRENT_MODE = mode
                 CURRENT_ERROR = None
+                CURRENT_AI_REPORT = None
+                CURRENT_FIX_SCRIPT = None
+                CURRENT_VISUALIZATIONS = None
 
                 self.send_response(302)
                 self.send_header("Location", "/preview")
@@ -2805,6 +2812,7 @@ class AppHandler(BaseHTTPRequestHandler):
                 CURRENT_DATA_QUALITY = CURRENT_RESULT.get("data_quality", analyze_data_quality(CURRENT_DATAFRAME))
                 CURRENT_AI_REPORT = None
                 CURRENT_FIX_SCRIPT = None
+                CURRENT_VISUALIZATIONS = None
                 CURRENT_ERROR = None
 
                 self.send_response(302)

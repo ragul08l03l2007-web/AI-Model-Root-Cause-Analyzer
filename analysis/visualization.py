@@ -409,7 +409,7 @@ def build_missing_values_chart(result: Dict[str, Any]) -> Optional[Dict[str, Any
     missing_pcts = quality.get("missing_percentages", {})
     if not missing_pcts:
         missing_vals = quality.get("missing_values", {})
-        total_rows = result.get("dataset_info", {}).get("rows", 100) or 100
+        total_rows = quality.get("total_rows", quality.get("rows", result.get("total_samples", result.get("dataset_info", {}).get("rows", 100)))) or 100
         missing_pcts = {k: (_safe_float(v) / total_rows) * 100 for k, v in missing_vals.items()}
 
     if not missing_pcts:
