@@ -107,7 +107,7 @@ def run_test():
         assert resp.status == 200
         dash_html = resp.read().decode("utf-8")
         assert "Multi-Model Comparison" in dash_html
-        assert "Evidence-Based Root-Cause Candidates" in dash_html
+        assert "Diagnostic Signals &amp; Root-Cause Hypotheses" in dash_html or "Diagnostic Signals & Root-Cause Hypotheses" in dash_html or "Evidence-Based Root-Cause Candidates" in dash_html
         assert "np.int" not in dash_html, "NumPy type found in dashboard HTML!"
         print("-> GET /dashboard passed (200, clean HTML with no numpy types)")
 

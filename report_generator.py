@@ -118,11 +118,14 @@ def generate_report(data_quality, model_result):
         print(f"  Overfitting Check: {stability.get('overfitting_diagnostic', 'None')} ({stability.get('overfitting_explanation', '')})")
 
     # --------------------------------------------------------
-    # 4. Evidence-Based Root-Cause Diagnostic Chain
+    # 4. Diagnostic Signals & Root-Cause Hypotheses
     # --------------------------------------------------------
     print()
-    print("4. EVIDENCE-BASED ROOT-CAUSE FINDINGS")
+    print("4. DIAGNOSTIC SIGNALS & ROOT-CAUSE HYPOTHESES")
     print("-" * 70)
+    print("Disclaimer: Controlled ablation and permutation experiments measure empirical model reliance")
+    print("under the tested interventions. They do not establish real-world causal relationships.")
+    print()
 
     structured_rc = model_result.get("root_causes_structured", [])
     if structured_rc:
@@ -130,14 +133,21 @@ def generate_report(data_quality, model_result):
             sev = rc.get("severity", "MEDIUM")
             cat = rc.get("category", "Root Cause Candidate")
             conf = rc.get("confidence", "High")
+            status = rc.get("diagnostic_status", "SIGNAL DETECTED")
+            verif_score = rc.get("verification_score", "")
+
             print(f"{index}. [{cat}] {rc.get('finding', rc.get('root_cause', ''))}")
-            print(f"   Severity       : {sev}")
-            print(f"   Evidence       : {rc.get('evidence', '')}")
-            print(f"   Interpretation : {rc.get('interpretation', '')}")
-            print(f"   Potential Cause: {rc.get('potential_explanation', '')}")
-            print(f"   Impact         : {rc.get('impact', '')}")
-            print(f"   Confidence     : {conf} (based on multi-source evidence)")
-            print(f"   Recommended    : {rc.get('recommended_action', '')}")
+            print(f"   Diagnostic Status: {status}" + (f" ({verif_score})" if verif_score and verif_score != "N/A" else ""))
+            print(f"   Severity         : {sev}")
+            print(f"   Signal           : {rc.get('signal', rc.get('title', ''))}")
+            print(f"   Initial Evidence : {rc.get('initial_evidence', rc.get('evidence', ''))}")
+            print(f"   Hypothesis       : {rc.get('hypothesis', rc.get('potential_explanation', ''))}")
+            print(f"   Interpretation   : {rc.get('interpretation', '')}")
+            if rc.get("verification_evidence"):
+                print(f"   Verif. Evidence  : {rc.get('verification_evidence')}")
+            print(f"   Impact           : {rc.get('impact', '')}")
+            print(f"   Confidence       : {conf} (based on multi-source evidence)")
+            print(f"   Recommended      : {rc.get('recommended_action', '')}")
             print()
     else:
         root_causes = model_result.get("root_causes", [])
@@ -155,7 +165,8 @@ def generate_report(data_quality, model_result):
         print()
         print("5. FEATURE IMPORTANCE & EMPIRICAL RELATIONSHIPS")
         print("-" * 70)
-        print("Note: Importance reflects predictive influence in the model, NOT proven causation.")
+        print("Disclaimer: Feature importance measures predictive usefulness in the model for this dataset.")
+        print("It does not prove causal necessity, positive/negative relationship direction, or business importance.")
         print()
         for feat, data in list(feature_impact.items())[:6]:
             if isinstance(data, dict):

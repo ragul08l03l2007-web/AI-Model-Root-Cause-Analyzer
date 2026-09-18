@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import balanced_accuracy_score
 
 from analysis.evidence import DiagnosticEvidence, EvidenceBus, safe_primitive
 from analysis.profiler import DataProfiler
@@ -27,6 +28,8 @@ from analysis.diagnostic_engine import (
     RiskEngine,
     RecommendationEngine,
 )
+from analysis.verification_engine import VerificationEngine
+
 
 
 def _safe_val(val: Any) -> Any:
@@ -271,10 +274,11 @@ def analyze_model(
         y_test_orig = [classes[idx] for idx in y_test]
         y_pred_orig = [classes[idx] for idx in y_pred]
         model_performance = {
-            "accuracy": selected_meta["test_accuracy"],
-            "precision": selected_meta["test_precision"],
-            "recall": selected_meta["test_recall"],
-            "f1_score": selected_meta["test_f1_score"],
+            "accuracy": selected_meta.get("test_accuracy", selected_meta.get("accuracy", 0.0)),
+            "balanced_accuracy": selected_meta.get("test_balanced_accuracy", selected_meta.get("balanced_accuracy", round(float(balanced_accuracy_score(y_test, y_pred)), 4))),
+            "precision": selected_meta.get("test_precision", selected_meta.get("precision", 0.0)),
+            "recall": selected_meta.get("test_recall", selected_meta.get("recall", 0.0)),
+            "f1_score": selected_meta.get("test_f1_score", selected_meta.get("f1_score", 0.0)),
             "selected_model": selected_model_name,
             "training_rows": len(X_train),
             "testing_rows": len(X_test),
@@ -404,7 +408,7 @@ def analyze_model(
             ))
 
     # --------------------------------------------------------
-    # 10. Dynamic Diagnostic Candidate Synthesis from Evidence Bus
+    # 10. Candidate Hypotheses Synthesis from Evidence Bus
     # --------------------------------------------------------
     all_evidence = evidence_bus.all()
     cv_std_val = cross_validation.get("standard_deviation", 0.0)
@@ -419,6 +423,92 @@ def analyze_model(
         cv_std=cv_std_val,
         cross_model_consistent=cross_model_agree
     )
+
+    # --------------------------------------------------------
+    # 11. Automated Root-Cause Verification & Closed-Loop Remediation
+    # --------------------------------------------------------
+    verification_payload = {}
+    eval_metric_label = "Weighted F1" if resolved_task_type == "classification" else "R2 Score"
+    try:
+        verification_payload = VerificationEngine.verify_and_simulate(
+            X_df=X_df,
+            y_raw=y_raw,
+            task_type=resolved_task_type,
+            champion_model=selected_model,
+            feature_impact=feature_impact,
+            diagnostic_candidates=root_causes_structured,
+            max_candidates=3,
+            target_column=target_column,
+            selected_model_name=selected_model_name,
+            evaluation_metric=eval_metric_label,
+        )
+    except Exception as e:
+        verification_payload = {
+            "status": "Skipped",
+            "reason": str(e),
+            "candidate_experiments": [],
+            "experiments_count": 0,
+            "remediation_simulation": {},
+            "evidence_graph": {}
+        }
+
+    # --------------------------------------------------------
+    # 12. Evidence Fusion: Experimental Evidence Outranks Heuristics
+    # --------------------------------------------------------
+    verif_exps = verification_payload.get("candidate_experiments", [])
+    exp_by_feature = {e.get("candidate_feature"): e for e in verif_exps if e.get("candidate_feature")}
+
+    for rc in root_causes_structured:
+        # Check if candidate is tied to a feature that was experimentally tested
+        tested_feat = None
+        for f in rc.get("evidence_items", []):
+            for af in f.get("affected_features", []):
+                if af in exp_by_feature:
+                    tested_feat = af
+                    break
+        if not tested_feat and rc.get("domain") == "feature_reliance":
+            for cand_f in exp_by_feature:
+                if cand_f in rc.get("finding", "") or cand_f in rc.get("title", ""):
+                    tested_feat = cand_f
+                    break
+
+        if tested_feat and tested_feat in exp_by_feature:
+            exp_res = exp_by_feature[tested_feat]
+            verdict = exp_res.get("verdict", "")
+            ev_score = exp_res.get("evidence_score", 0)
+            rc["verification_score"] = f"Evidence Score: {ev_score}/100"
+            rc["evidence_score"] = ev_score
+            rc["verification_evidence"] = exp_res.get("summary", "")
+
+            if verdict == "VERIFIED MODEL RELIANCE":
+                rc["diagnostic_status"] = "VERIFIED MODEL RELIANCE"
+                rc["verification_status"] = "Verified through controlled experiments"
+                rc["finding"] = f"Verified Model Reliance on Predictor '{tested_feat}'"
+                rc["interpretation"] = (
+                    f"Controlled experiments confirmed the selected model exhibits strong empirical reliance on '{tested_feat}' "
+                    f"under the tested dataset, split, and interventions (ablation delta: {exp_res.get('ablation_delta', 0):+.4f}, "
+                    f"permutation delta: {exp_res.get('permutation_delta', 0):+.4f})."
+                )
+            elif verdict == "NO MEASURABLE MODEL RELIANCE":
+                rc["diagnostic_status"] = "NO MEASURABLE MODEL RELIANCE"
+                rc["verification_status"] = "No measurable model reliance under tested interventions"
+                rc["severity"] = "LOW"
+                rc["finding"] = f"No Measurable Model Reliance on Predictor '{tested_feat}'"
+                rc["interpretation"] = (
+                    f"Under the tested split and interventions, removing or permuting '{tested_feat}' produced no measurable "
+                    f"change in the selected evaluation metric."
+                )
+            elif verdict:
+                rc["diagnostic_status"] = verdict
+                rc["verification_status"] = f"Tested ({verdict})"
+        else:
+            if rc.get("domain") in {"leakage", "sample_size"}:
+                rc["diagnostic_status"] = "SIGNAL DETECTED"
+            else:
+                rc["diagnostic_status"] = "CANDIDATE HYPOTHESIS"
+            rc["verification_status"] = "NOT TESTED"
+            rc["verification_score"] = "N/A"
+            rc["verification_evidence"] = "Controlled counterfactual experiments were not conducted for this candidate."
 
     # Sort structured diagnostic findings by severity, evidence strength, and confidence
     sev_order = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
@@ -447,6 +537,12 @@ def analyze_model(
             "finding": rc["finding"],
             "issue": rc["finding"],
             "title": rc["title"],
+            "signal": rc.get("signal", rc["title"]),
+            "initial_evidence": rc.get("initial_evidence", rc["evidence"]),
+            "hypothesis": rc.get("hypothesis", rc.get("potential_explanation", "")),
+            "diagnostic_status": rc.get("diagnostic_status", "SIGNAL DETECTED"),
+            "verification_status": rc.get("verification_status", "NOT TESTED"),
+            "verification_score": rc.get("verification_score", "N/A"),
             "category": rc["category"],
             "domain": rc.get("domain", ""),
             "evidence": rc["evidence"],
@@ -461,7 +557,7 @@ def analyze_model(
         })
 
     # --------------------------------------------------------
-    # 11. Continuous Evidence-Weighted Risk Calculation
+    # 13. Continuous Evidence-Weighted Risk Calculation
     # --------------------------------------------------------
     class_info = {
         "class_imbalance": target_profile.get("class_imbalance", False),
@@ -494,7 +590,7 @@ def analyze_model(
     overall_risk = risk_dict["level"]
 
     # --------------------------------------------------------
-    # 12. Model-Aware Actionable Recommendations
+    # 14. Model-Aware Actionable Recommendations
     # --------------------------------------------------------
     recommendations, recommendations_structured = RecommendationEngine.generate_recommendations(
         task_type=resolved_task_type,
@@ -504,10 +600,9 @@ def analyze_model(
     )
 
     # --------------------------------------------------------
-    # 13. Operational Evidence-Driven Warnings Construction
+    # 15. Operational Evidence-Driven Warnings Construction
     # --------------------------------------------------------
     warnings_list = []
-    # Active diagnostic candidates with meaningful severity
     for rc in root_causes_structured:
         sev = rc.get("severity", "MEDIUM")
         if sev in ("HIGH", "CRITICAL"):
@@ -515,16 +610,13 @@ def analyze_model(
         elif sev == "MEDIUM" and rc.get("category") != "Diagnostic Observation":
             warnings_list.append(f"[MEDIUM] {rc['finding']}: {rc['evidence']}")
 
-    # Canonical data quality warnings (excluding generic placeholder)
     for w in data_quality.get("warnings", []):
         if "No major data-quality problems" not in w and w not in warnings_list:
             warnings_list.append(f"[Data Quality] {w}")
 
-    # Binary target compatibility note in regression mode
     if target_profile.get("binary_target_compatibility_note"):
         warnings_list.append(f"[Target Semantic Caveat] {target_profile['binary_target_compatibility_note']}")
 
-    # Synthesize evidence-driven overall diagnostic summary
     if resolved_task_type == "regression":
         top_rc = root_causes_structured[0] if root_causes_structured else None
         res_summary = err_results.get("main_error", "")
@@ -602,6 +694,10 @@ def analyze_model(
         "root_causes": root_causes_strings,
         "priority_findings": priority_findings,
         "priority_issues": priority_findings,
+        "verification_engine": verification_payload,
+        "verification_experiments": verification_payload.get("candidate_experiments", []),
+        "remediation_simulation": verification_payload.get("remediation_simulation", {}),
+        "evidence_graph": verification_payload.get("evidence_graph", {}),
         "risk": risk_dict,
         "risk_assessment": risk_dict,
         "risk_score": risk_score,
@@ -617,7 +713,8 @@ def analyze_model(
         "dataset_profile": data_quality,
         "limitations": [
             "Observations reflect empirical patterns on provided dataset partitions.",
-            "Feature importance indicates model predictive usefulness, not verified real-world causation.",
+            "Feature importance measures predictive usefulness in the model for this dataset. It does not prove causal necessity, positive/negative relationship direction, or business importance.",
+            "Controlled ablation and permutation experiments measure empirical model reliance under the tested interventions. They do not establish real-world causal relationships.",
             "Confidence intervals widen on smaller sample counts."
         ],
     }

@@ -185,3 +185,63 @@ class PreprocessingEngine:
             transformers.append(("cat", cat_pipe, categorical_columns))
 
         return ColumnTransformer(transformers=transformers, remainder="drop")
+
+    @classmethod
+    def build_preprocessed_matrices(
+        cls,
+        X_df: pd.DataFrame,
+        y_raw: pd.Series,
+        task_type: str = "classification"
+    ) -> Tuple[ColumnTransformer, List[str], np.ndarray, np.ndarray, List[str]]:
+        """
+        Builds, fits, and returns preprocessed feature matrices and target arrays.
+        Returns: (preprocessor, transformed_feature_names, X_transformed, y_encoded, classes)
+        """
+        from sklearn.preprocessing import LabelEncoder
+        from scipy import sparse
+
+        feature_names = [str(c) for c in X_df.columns]
+        numeric_columns = [str(c) for c in X_df.select_dtypes(include=["number", "bool"]).columns]
+        categorical_columns = [c for c in feature_names if c not in numeric_columns]
+
+        preprocessor = cls.build_column_transformer(
+            numeric_columns=numeric_columns,
+            categorical_columns=categorical_columns
+        )
+
+        X_transformed = preprocessor.fit_transform(X_df)
+        if sparse.issparse(X_transformed):
+            X_transformed = X_transformed.toarray()
+        else:
+            X_transformed = np.asarray(X_transformed)
+
+        # Get feature names
+        try:
+            transformed_feature_names = list(preprocessor.get_feature_names_out())
+        except Exception:
+            transformed_feature_names = []
+            for col in numeric_columns:
+                transformed_feature_names.append(f"num__{col}")
+            for col in categorical_columns:
+                try:
+                    cats = preprocessor.named_transformers_["cat"].named_steps["onehot"].categories_
+                    for c_idx, cat_col in enumerate(categorical_columns):
+                        for cat_val in cats[c_idx]:
+                            transformed_feature_names.append(f"cat__{cat_col}_{cat_val}")
+                except Exception:
+                    transformed_feature_names.append(f"cat__{col}")
+
+        if len(transformed_feature_names) != X_transformed.shape[1]:
+            transformed_feature_names = [f"f_{i}" for i in range(X_transformed.shape[1])]
+
+        # Target encoding
+        if task_type == "classification":
+            label_encoder = LabelEncoder()
+            y_encoded = label_encoder.fit_transform(y_raw.astype(str))
+            classes = [str(c) for c in label_encoder.classes_]
+        else:
+            y_encoded = np.asarray(pd.to_numeric(y_raw, errors="coerce").fillna(0.0), dtype=float)
+            classes = []
+
+        return preprocessor, transformed_feature_names, X_transformed, y_encoded, classes
+

@@ -19,6 +19,7 @@ from sklearn.ensemble import (
 from sklearn.model_selection import StratifiedKFold, KFold, cross_val_score
 from sklearn.metrics import (
     accuracy_score,
+    balanced_accuracy_score,
     precision_score,
     recall_score,
     f1_score,
@@ -141,6 +142,7 @@ class ModelEngine:
 
                 if task_type == "classification":
                     acc = float(accuracy_score(y_test, y_pred))
+                    bal_acc = float(balanced_accuracy_score(y_test, y_pred))
                     prec = float(precision_score(y_test, y_pred, average="weighted", zero_division=0))
                     rec = float(recall_score(y_test, y_pred, average="weighted", zero_division=0))
                     f1 = float(f1_score(y_test, y_pred, average="weighted", zero_division=0))
@@ -148,10 +150,12 @@ class ModelEngine:
                     comparison_list.append({
                         "model": name,
                         "test_accuracy": round(acc, 4),
+                        "test_balanced_accuracy": round(bal_acc, 4),
                         "test_precision": round(prec, 4),
                         "test_recall": round(rec, 4),
                         "test_f1_score": round(f1, 4),
                         "accuracy": round(acc, 4),
+                        "balanced_accuracy": round(bal_acc, 4),
                         "f1_score": round(f1, 4),
                         "cv_mean": round(cv_mean, 4),
                         "cv_std": round(cv_std, 4),
@@ -298,8 +302,8 @@ class ModelEngine:
                     f"by {score_gap:.1%}."
                 )
             else:
-                overfit_status = "Consistent Generalization Performance"
-                overfit_expl = f"No strong generalization discrepancy was detected between training ({train_score:.1%}) and evaluation partitions ({eval_score:.1%})."
+                overfit_status = "No Material Generalization Problem"
+                overfit_expl = f"No material generalization problem detected between training ({train_score:.1%}) and evaluation partitions ({eval_score:.1%})."
 
             if selected_cv_std_canonical > 0.12 or selected_cv_range_canonical > 0.28:
                 stab_status = "VARIABLE"
@@ -343,8 +347,8 @@ class ModelEngine:
                 overfit_status = "Moderate Training-Evaluation Performance Gap"
                 overfit_expl = f"Training R² ({train_score:.4f}) moderately exceeds test R² ({eval_score:.4f}) by {score_gap:.4f}."
             else:
-                overfit_status = "Consistent Generalization Performance"
-                overfit_expl = f"No strong generalization discrepancy was detected between training ({train_score:.4f}) and evaluation R² ({eval_score:.4f})."
+                overfit_status = "No Material Generalization Problem"
+                overfit_expl = f"No material generalization problem detected between training ({train_score:.4f}) and evaluation R² ({eval_score:.4f})."
 
             if selected_cv_std_canonical > 0.15 or selected_cv_range_canonical > 0.35:
                 stab_status = "VARIABLE"

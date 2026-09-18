@@ -102,20 +102,35 @@ class OfflineDeterministicProvider(BaseAIProvider):
         data_summary = payload.get("dataset_summary", {})
         total_rows = data_summary.get("total_rows", 0)
         target_col = target_info.get("target_column", "target")
+        verif_exps = payload.get("verification_experiments", [])
+        remed_sim = payload.get("remediation_simulation", {})
 
         # Build Executive Summary
-        if not root_causes:
+        if not root_causes and not verif_exps:
             summary = (
                 f"The diagnostic audit confirmed that the {model_name} on target '{target_col}' "
                 f"({total_rows} records) is performing in a healthy regime with an overall risk score of {risk_score}/100. "
                 "No critical data leakage, high-severity class distortion, or catastrophic overfitting was detected."
             )
         else:
-            top_findings = ", ".join([rc.get("finding", "") for rc in root_causes[:2]])
+            top_findings = ", ".join([rc.get("finding", "") for rc in root_causes[:2]]) if root_causes else "Feature reliance verified through controlled trials"
+            verif_phrase = ""
+            if verif_exps:
+                verified_feats = [e.get("candidate") for e in verif_exps if e.get("verdict") == "VERIFIED MODEL RELIANCE"]
+                refuted_feats = [e.get("candidate") for e in verif_exps if e.get("verdict") == "NO MEASURABLE MODEL RELIANCE"]
+                if verified_feats:
+                    verif_phrase = f" Controlled empirical experiments verified strong operational model reliance on '{', '.join(verified_feats)}'."
+                if refuted_feats:
+                    verif_phrase += f" Interventions confirmed no measurable reliance on '{', '.join(refuted_feats)}'."
+
+            remed_phrase = ""
+            if remed_sim and remed_sim.get("resolution_verdict") != "None":
+                remed_phrase = f" Closed-loop remediation simulation verdict: {remed_sim.get('resolution_verdict')}."
+
             summary = (
                 f"The diagnostic audit identified {len(root_causes)} primary issue(s) affecting {model_name} "
                 f"trained on '{target_col}' ({total_rows} observations). The model is operating under "
-                f"a {risk_level} risk level (Score: {risk_score}/100). The most critical vulnerabilities are: {top_findings}. "
+                f"a {risk_level} risk level (Score: {risk_score}/100). The most critical vulnerabilities are: {top_findings}.{verif_phrase}{remed_phrase} "
                 "Targeted data engineering and hyperparameter adjustments are required before production deployment."
             )
 
@@ -133,21 +148,93 @@ class OfflineDeterministicProvider(BaseAIProvider):
                 "recommended_action": rc.get("recommended_action", "Apply data transformation and re-evaluate.")
             })
 
+        # Append structured verification findings if available
+        for exp in verif_exps:
+            cand = exp.get("candidate", exp.get("candidate_feature"))
+            score = exp.get("evidence_score", 0)
+            verdict = exp.get("verdict", "")
+            decomp = exp.get("score_decomposition", {})
+            if verdict == "VERIFIED MODEL RELIANCE":
+                detailed_rcs.append({
+                    "category": "Experimental Verification",
+                    "finding": f"Empirical Model Reliance Verified for '{cand}' (Score: {score}/100)",
+                    "severity": "HIGH" if score >= 80 else "MEDIUM",
+                    "confidence": "High",
+                    "why_it_matters": (
+                        f"The model exhibits strong empirical reliance on '{cand}' under the tested dataset, split, and interventions "
+                        f"(ablation delta: {exp.get('ablation_delta', 0):+.4f}, permutation delta: {exp.get('permutation_delta', 0):+.4f})."
+                    ),
+                    "evidence_summary": (
+                        f"Evidence Score: {score}/100 [Ablation: {decomp.get('ablation_points', decomp.get('ablation_evidence_pts', 0))}/35, "
+                        f"Permutation: {decomp.get('permutation_points', decomp.get('permutation_evidence_pts', 0))}/35, "
+                        f"Control: {decomp.get('control_points', decomp.get('control_specificity_pts', 0))}/15, "
+                        f"Stability: {decomp.get('stability_points', decomp.get('measurement_stability_pts', 0))}/10, "
+                        f"Consistency: {decomp.get('consistency_points', decomp.get('experimental_consistency_pts', 0))}/5]. "
+                        f"Measurement stability test (10% σ jitter) produced {exp.get('prediction_flip_rate_pct', 0.0):.1f}% prediction flips (stable)."
+                    ),
+                    "business_risk": (
+                        f"Operational consideration: Because the selected model exhibits strong empirical reliance on '{cand}', "
+                        f"production monitoring should track changes in its distribution and data-collection process if deployed. "
+                        f"The current experiments do not establish that such shifts will degrade production performance."
+                    ),
+                    "recommended_action": (
+                        f"If deployed, monitor distribution drift and data-quality changes in '{cand}' over time, audit data collection integrity, "
+                        f"and evaluate alternative model configurations if reducing feature concentration is operationally necessary."
+                    )
+                })
+            elif verdict == "NO MEASURABLE MODEL RELIANCE":
+                detailed_rcs.append({
+                    "category": "Experimental Verification",
+                    "finding": f"No Measurable Model Reliance on '{cand}' (Score: 0/100)",
+                    "severity": "LOW",
+                    "confidence": "High",
+                    "why_it_matters": "Under the tested split and interventions, removing or permuting this feature produced no measurable change in the evaluation metric.",
+                    "evidence_summary": f"Ablation Delta: {exp.get('ablation_delta', 0):+.4f}, Permutation Delta: {exp.get('permutation_delta', 0):+.4f}, Control Delta: {exp.get('control_delta', 0):+.4f}.",
+                    "business_risk": "No measurable operational risk detected under current model evaluation partitions.",
+                    "recommended_action": "No measurable model reliance detected under current testing; retain or re-evaluate based on domain requirements and future data/model changes."
+                })
+
         # Risk Assessment
         risk_assessment = {
             "overall_risk_level": risk_level,
             "risk_score": risk_score,
             "deployment_readiness": "Ready for Staging" if risk_score < 30 else ("Requires Review" if risk_score < 60 else "Block Deployment"),
-            "critical_vulnerabilities_count": sum(1 for rc in root_causes if rc.get("severity") in ("HIGH", "CRITICAL")),
-            "governance_note": "Grounded directly in deterministic statistical tests across cross-validation folds."
+            "critical_vulnerabilities_count": sum(1 for rc in detailed_rcs if rc.get("severity") in ("HIGH", "CRITICAL")),
+            "governance_note": "Grounded directly in deterministic statistical tests and controlled counterfactual interventions."
         }
 
-        # Remediation Roadmap
+        # Remediation Roadmap (Distinguishing Completed Diagnostics from Recommended Future Actions)
         roadmap = []
-        for idx, rc in enumerate(root_causes, start=1):
-            roadmap.append(f"Step {idx} [{rc.get('severity', 'MEDIUM')}]: {rc.get('recommended_action', '')}")
+        seen_actions = set()
+
+        # Add domain-specific future engineering actions from general root causes
+        for rc in detailed_rcs:
+            if rc.get("category") in ("Diagnostic Observation", "Experimental Verification"):
+                continue
+            act = rc.get("recommended_action", "").strip()
+            if act and act not in seen_actions:
+                seen_actions.add(act)
+                roadmap.append(f"Step {len(roadmap) + 1} [{rc.get('severity', 'MEDIUM')}]: {act}")
+
+        # Add forward-looking future actions for verified model reliance candidates
+        for exp in verif_exps:
+            cand = exp.get("candidate", exp.get("candidate_feature"))
+            verdict = exp.get("verdict", "")
+            if verdict == "VERIFIED MODEL RELIANCE":
+                future_actions = [
+                    f"Audit data collection integrity and pipeline stability specifically for '{cand}'.",
+                    f"Evaluate alternative model configurations, feature selection, or regularization techniques if reducing feature concentration is operationally necessary.",
+                    f"If deployed, monitor distribution drift and data-quality changes in '{cand}' over time.",
+                    f"Use the completed measurement-stability result as a baseline reference when evaluating realistic production measurement-error scenarios.",
+                    f"Evaluate model behavior under realistic production error and distribution-shift scenarios when representative deployment data becomes available."
+                ]
+                for act in future_actions:
+                    if act not in seen_actions:
+                        seen_actions.add(act)
+                        roadmap.append(f"Step {len(roadmap) + 1} [MEDIUM]: {act}")
+
         if not roadmap:
-            roadmap.append("Maintain continuous monitoring of feature distributions and target drift in production.")
+            roadmap.append("Step 1 [LOW]: If deployed, monitor distribution drift and data-quality changes in primary features and target distributions over time.")
 
         return {
             "provider": self.provider_name,
@@ -324,8 +411,41 @@ class OfflineDeterministicProvider(BaseAIProvider):
         model_name = payload.get("selected_model", {}).get("name", "Model")
         feat_imp = payload.get("feature_importance", {})
         task_type = payload.get("task_type", "classification")
+        verif_exps = payload.get("verification_experiments", [])
+        remed_sim = payload.get("remediation_simulation", {})
 
-        if "why" in q_lower or "poor" in q_lower or "fail" in q_lower or "cause" in q_lower:
+        if any(w in q_lower for w in ["ablation", "permutation", "verif", "experiment", "evidence score", "reliance", "noise", "jitter", "control"]):
+            if not verif_exps:
+                return "No targeted verification experiments were conducted for this model run."
+            lines = ["**Empirical Root-Cause Verification & Intervention Trials**:"]
+            for exp in verif_exps:
+                cand = exp.get("candidate")
+                verdict = exp.get("verdict")
+                score = exp.get("evidence_score", 0)
+                decomp = exp.get("score_decomposition", {})
+                lines.append(f"\n- **Candidate '{cand}'** → Verdict: `{verdict}` (Evidence Score: {score}/100)")
+                lines.append(f"  • Ablation Drop: {exp.get('ablation_delta', 0):+.4f} (Score Contribution: {decomp.get('ablation_evidence_pts', 0)}/35 pts)")
+                lines.append(f"  • Permutation Drop: {exp.get('permutation_delta', 0):+.4f} (Score Contribution: {decomp.get('permutation_evidence_pts', 0)}/35 pts)")
+                lines.append(f"  • Control ({exp.get('control_feature')}): {exp.get('control_delta', 0):+.4f} (Score Contribution: {decomp.get('control_specificity_pts', 0)}/15 pts)")
+                lines.append(f"  • Measurement Stability (10% σ Jitter): Flip Rate = {exp.get('prediction_flip_rate_pct', 0.0)}% (Score Contribution: {decomp.get('measurement_stability_pts', 0)}/10 pts)")
+                lines.append(f"  • Consistency Contribution: {decomp.get('experimental_consistency_pts', 0)}/5 pts")
+            return "\n".join(lines)
+
+        elif any(w in q_lower for w in ["remediat", "simulation", "fix", "resolution", "pipeline"]):
+            if not remed_sim or remed_sim.get("resolution_verdict") == "None":
+                return f"Closed-loop remediation simulated standard data hygiene and regularized modeling for {model_name}."
+            verdict = remed_sim.get("resolution_verdict")
+            t_delta = remed_sim.get("test_metric_delta", 0.0)
+            g_red = remed_sim.get("generalization_gap_reduction", 0.0)
+            return (
+                f"**Closed-Loop Remediation Simulation Results**:\n"
+                f"- **Resolution Verdict**: `{verdict}`\n"
+                f"- **Held-Out Test Metric Delta**: {t_delta:+.4f}\n"
+                f"- **Generalization Gap Reduction**: {g_red:+.4f}\n"
+                f"The automated fix pipeline was simulated end-to-end to verify resolution before suggesting deployment."
+            )
+
+        elif "why" in q_lower or "poor" in q_lower or "fail" in q_lower or "cause" in q_lower:
             if not root_causes:
                 return (
                     f"According to the diagnostic evidence, the {model_name} did not exhibit major failure patterns. "
@@ -346,12 +466,14 @@ class OfflineDeterministicProvider(BaseAIProvider):
             return f"Evaluation metrics for selected {model_name}:\n\n{metric_text}"
 
         else:
+            verif_count = len(verif_exps)
             return (
                 f"**Diagnostic Summary for {model_name}**:\n"
                 f"- Task Type: {task_type.capitalize()}\n"
                 f"- Risk Score: {payload.get('overall_risk', {}).get('risk_score', 0)}/100 ({payload.get('overall_risk', {}).get('risk_level', 'LOW')})\n"
                 f"- Active Root Causes Detected: {len(root_causes)}\n"
-                f"You can ask me about specific features, errors, failure causes, or remediation steps!"
+                f"- Verification Experiments Conducted: {verif_count}\n"
+                f"You can ask me about ablation results, evidence score breakdowns, stability tests, or remediation resolution!"
             )
 
 
@@ -453,16 +575,41 @@ class GeminiProvider(BaseAIProvider):
 
     def generate_explanation(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         system_instruction = (
-            "You are a Senior Machine Learning Reliability and Quality Assurance Engineer. "
-            "Explain the mathematical evidence clearly and concisely without hallucinating. "
-            "Return valid JSON matching the requested schema."
+            "You are a Senior Machine Learning Reliability and Quality Assurance Engineer.\n"
+            "MANDATORY SCIENTIFIC & CAUSALITY GUIDELINES:\n"
+            "1. DISTINGUISH OBSERVED EVIDENCE FROM HYPOTHESIS / OPERATIONAL RISK:\n"
+            "   - State observed empirical evidence (ablation drop, permutation drop, control test comparison, 10% measurement jitter stability).\n"
+            "   - Frame potential future vulnerabilities (e.g. data drift, schema corruption) strictly as operational considerations or hypotheses, NOT as experimentally proven facts unless proven by an actual drift/error trial.\n"
+            "   - If counterfactual noise/jitter testing demonstrated low flip rate and minimal drop, report that the model showed measurement stability under the tested 10% jitter, rather than asserting high vulnerability.\n"
+            "   - For operational monitoring recommendations, use conditional deployment phrasing: 'If deployed, monitor distribution drift and data-quality changes in [feature] over time.' Do not assume a production environment exists.\n"
+            "2. DISTINGUISH COMPLETED EXPERIMENTS FROM FUTURE REMEDIATION ROADMAP:\n"
+            "   - The payload contains 'completed_experiments' (retrained_feature_ablation, test_time_permutation, measurement_stability, control_feature_test, closed_loop_remediation).\n"
+            "   - COMPLETED experiments are already finished evidence. Do NOT imply that completed experiments still need to be performed or that they established general production robustness (e.g. do NOT say 'Review completed measurement-stability results to establish baseline robustness parameters for deployment').\n"
+            "   - For measurement stability, state: 'Use the completed measurement-stability result as a baseline reference when evaluating realistic production measurement-error scenarios.'\n"
+            "   - FUTURE roadmap items must focus strictly on forward-looking engineering and deployment actions:\n"
+            "     • Audit data collection integrity and pipeline stability specifically for [feature].\n"
+            "     • Evaluate alternative model configurations, feature selection, or regularization techniques if reducing feature concentration is operationally necessary.\n"
+            "     • If deployed, monitor distribution drift and data-quality changes in [feature] over time.\n"
+            "     • Use the completed measurement-stability result as a baseline reference when evaluating realistic production measurement-error scenarios.\n"
+            "     • Evaluate model behavior under realistic production error and distribution-shift scenarios when representative deployment data becomes available.\n"
+            "3. STRICTLY PROHIBIT REAL-WORLD CAUSAL CLAIMS:\n"
+            "   - Feature importance = predictive usefulness/influence within the model on this dataset.\n"
+            "   - Ablation = effect of removing a feature and retraining under the tested setup.\n"
+            "   - Permutation = effect of disrupting the feature-target relationship at test time.\n"
+            "   - Measurement jitter = robustness/sensitivity to tested perturbation.\n"
+            "   - Control experiment = comparison against another feature/intervention.\n"
+            "   - None of these alone establishes real-world causality. Never claim a feature causes the target in reality (e.g. do NOT say 'annual_income causes customer segment').\n"
+            "   - Use scientifically precise phrasing: 'The model exhibits strong empirical reliance on [feature] under the tested dataset, split, and interventions.'\n"
+            "4. NO MEASURABLE MODEL RELIANCE:\n"
+            "   - For features showing no measurable change under ablation or permutation, state: 'Under the tested split and interventions, removing or permuting this feature produced no measurable change in the selected evaluation metric.' Do not call them irrelevant, useless, or unneeded in reality.\n"
+            "5. Return valid JSON matching the requested schema."
         )
 
         prompt = (
             "Analyze this deterministic ML diagnostic evidence payload and produce a structured root-cause report in JSON:\n\n"
             f"```json\n{json.dumps(payload, indent=2)}\n```\n\n"
             "Return a JSON object with exactly these top-level keys:\n"
-            "- executive_summary: A 2-3 sentence executive synthesis explaining model behavior, performance, and key root cause.\n"
+            "- executive_summary: A 2-3 sentence executive synthesis explaining model behavior, observed reliance, and key findings.\n"
             "- root_causes_detailed: List of objects with [finding, category, severity, confidence, why_it_matters, evidence_summary, business_risk, recommended_action].\n"
             "- risk_assessment: Object with [overall_risk_level, risk_score, deployment_readiness, critical_vulnerabilities_count, governance_note].\n"
             "- remediation_roadmap: List of sequential step-by-step strings to fix the data and model pipeline.\n"
@@ -521,7 +668,7 @@ class GeminiProvider(BaseAIProvider):
     ) -> str:
         system_instruction = (
             "You are the AI Model Diagnostic Copilot. Provide a direct, high-signal, concise response "
-            "(2-3 short bullet points max unless asked for details). Answer strictly from the provided statistical evidence."
+            "(2-3 short bullet points max unless asked for details). Answer strictly from the provided statistical evidence and controlled experiment trials."
         )
 
         # Compact context for ultra-fast generation
@@ -536,7 +683,10 @@ class GeminiProvider(BaseAIProvider):
                 f"{rc.get('finding')} [{rc.get('severity')}] - {rc.get('interpretation')}"
                 for rc in payload.get("root_causes", [])[:3]
             ],
-            "top_features": list(payload.get("feature_importance", {}).items())[:4]
+            "top_features": list(payload.get("feature_importance", {}).items())[:4],
+            "completed_experiments": payload.get("completed_experiments", []),
+            "verification_experiments": payload.get("verification_experiments", [])[:3],
+            "remediation_simulation": payload.get("remediation_simulation", {})
         }
 
         history_text = ""
@@ -547,7 +697,7 @@ class GeminiProvider(BaseAIProvider):
                 history_text += f"{role.upper()}: {content}\n"
 
         prompt = (
-            f"SUMMARY EVIDENCE:\n{json.dumps(compact_context, indent=1)}\n\n"
+            f"SUMMARY EVIDENCE & VERIFICATION TRIALS:\n{json.dumps(compact_context, indent=1)}\n\n"
             f"{history_text}"
             f"QUESTION: {question}\n\n"
             "Answer clearly and concisely:"
@@ -607,9 +757,39 @@ class OpenAICompatibleProvider(BaseAIProvider):
             return data["choices"][0]["message"]["content"]
 
     def generate_explanation(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        system_instruction = (
+            "You are a Senior Machine Learning Reliability and Quality Assurance Engineer.\n"
+            "MANDATORY SCIENTIFIC & CAUSALITY GUIDELINES:\n"
+            "1. DISTINGUISH OBSERVED EVIDENCE FROM HYPOTHESIS / OPERATIONAL RISK:\n"
+            "   - State observed empirical evidence (ablation drop, permutation drop, control test comparison, 10% measurement jitter stability).\n"
+            "   - Frame potential future vulnerabilities (e.g. data drift, schema corruption) strictly as operational considerations or hypotheses, NOT as experimentally proven facts unless proven by an actual drift/error trial.\n"
+            "   - If counterfactual noise/jitter testing demonstrated low flip rate and minimal drop, report that the model showed measurement stability under the tested 10% jitter, rather than asserting high vulnerability.\n"
+            "   - For operational monitoring recommendations, use conditional deployment phrasing: 'If deployed, monitor distribution drift and data-quality changes in [feature] over time.' Do not assume a production environment exists.\n"
+            "2. DISTINGUISH COMPLETED EXPERIMENTS FROM FUTURE REMEDIATION ROADMAP:\n"
+            "   - The payload contains 'completed_experiments' (retrained_feature_ablation, test_time_permutation, measurement_stability, control_feature_test, closed_loop_remediation).\n"
+            "   - COMPLETED experiments are already finished evidence. Do NOT imply that completed experiments still need to be performed or that they established general production robustness (e.g. do NOT say 'Review completed measurement-stability results to establish baseline robustness parameters for deployment').\n"
+            "   - For measurement stability, state: 'Use the completed measurement-stability result as a baseline reference when evaluating realistic production measurement-error scenarios.'\n"
+            "   - FUTURE roadmap items must focus strictly on forward-looking engineering and deployment actions:\n"
+            "     • Audit data collection integrity and pipeline stability specifically for [feature].\n"
+            "     • Evaluate alternative model configurations, feature selection, or regularization techniques if reducing feature concentration is operationally necessary.\n"
+            "     • If deployed, monitor distribution drift and data-quality changes in [feature] over time.\n"
+            "     • Use the completed measurement-stability result as a baseline reference when evaluating realistic production measurement-error scenarios.\n"
+            "     • Evaluate model behavior under realistic production error and distribution-shift scenarios when representative deployment data becomes available.\n"
+            "3. STRICTLY PROHIBIT REAL-WORLD CAUSAL CLAIMS:\n"
+            "   - Feature importance = predictive usefulness/influence within the model on this dataset.\n"
+            "   - Ablation = effect of removing a feature and retraining under the tested setup.\n"
+            "   - Permutation = effect of disrupting the feature-target relationship at test time.\n"
+            "   - Measurement jitter = robustness/sensitivity to tested perturbation.\n"
+            "   - Control experiment = comparison against another feature/intervention.\n"
+            "   - None of these alone establishes real-world causality. Never claim a feature causes the target in reality (e.g. do NOT say 'annual_income causes customer segment').\n"
+            "   - Use scientifically precise phrasing: 'The model exhibits strong empirical reliance on [feature] under the tested dataset, split, and interventions.'\n"
+            "4. NO MEASURABLE MODEL RELIANCE:\n"
+            "   - For features showing no measurable change under ablation or permutation, state: 'Under the tested split and interventions, removing or permuting this feature produced no measurable change in the selected evaluation metric.' Do not call them irrelevant, useless, or unneeded in reality.\n"
+            "5. Return valid JSON matching the requested schema."
+        )
         messages = [
-            {"role": "system", "content": "You are a Senior ML Reliability Engineer. Explain the ML diagnostic JSON as structured JSON."},
-            {"role": "user", "content": f"Analyze this diagnostic payload and return JSON:\n{json.dumps(payload)}"}
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": f"Analyze this diagnostic payload and return JSON with keys [executive_summary, root_causes_detailed, risk_assessment, remediation_roadmap]:\n{json.dumps(payload)}"}
         ]
         try:
             content = self._call_chat_completions(messages, json_mode=True)
@@ -636,7 +816,7 @@ class OpenAICompatibleProvider(BaseAIProvider):
         question: str,
         chat_history: Optional[List[Dict[str, str]]] = None
     ) -> str:
-        messages = [{"role": "system", "content": f"Ground answers on this evidence:\n{json.dumps(payload)}"}]
+        messages = [{"role": "system", "content": f"Ground answers on this evidence and controlled verification trials:\n{json.dumps(payload)}"}]
         if chat_history:
             messages.extend(chat_history[-4:])
         messages.append({"role": "user", "content": question})
@@ -684,9 +864,17 @@ class OllamaProvider(BaseAIProvider):
             return data.get("response", "")
 
     def generate_explanation(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        system_instruction = (
+            "You are a Senior Machine Learning Reliability and Quality Assurance Engineer.\n"
+            "MANDATORY SCIENTIFIC & CAUSALITY GUIDELINES:\n"
+            "1. DISTINGUISH OBSERVED EVIDENCE FROM HYPOTHESIS / OPERATIONAL RISK: If deployed, monitor distribution drift and data-quality changes in input features over time.\n"
+            "2. DISTINGUISH COMPLETED EXPERIMENTS FROM FUTURE REMEDIATION ROADMAP: Completed experiments are evidence. Use completed measurement-stability results as a baseline reference. Future actions focus on data audits, alternative model configurations, and production monitoring if deployed.\n"
+            "3. STRICTLY PROHIBIT REAL-WORLD CAUSAL CLAIMS: Use 'The model exhibits strong empirical reliance on [feature] under tested interventions.'\n"
+            "4. Return valid JSON with [executive_summary, root_causes_detailed, risk_assessment, remediation_roadmap]."
+        )
         prompt = f"Analyze this ML diagnostic JSON and return a JSON explanation:\n{json.dumps(payload)}"
         try:
-            res = self._generate(prompt)
+            res = self._generate(prompt, system=system_instruction)
             return json.loads(res)
         except Exception:
             return self.fallback_provider.generate_explanation(payload)

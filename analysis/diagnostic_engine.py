@@ -232,8 +232,14 @@ class DiagnosticEngine:
         # ----------------------------------------------------
         # 3. Generalization & Partition Stability Grouping
         # ----------------------------------------------------
-        gen_evs = domain_groups.get("generalization", [])
-        part_evs = domain_groups.get("partition_stability", [])
+        gen_evs = [
+            e for e in domain_groups.get("generalization", [])
+            if e.evidence_id == "generalization_score_gap" and e.direction in {"gap", "overfitting", "deficit"} and e.observed_value >= 0.08
+        ]
+        part_evs = [
+            e for e in domain_groups.get("partition_stability", [])
+            if e.direction in {"variation", "instability"} and (e.observed_value >= 0.08 or e.magnitude >= 0.50)
+        ]
 
         if gen_evs or part_evs:
             combined_gen = gen_evs + part_evs
@@ -251,14 +257,16 @@ class DiagnosticEngine:
 
             should_emit_gen_candidate = False
             if gen_evs:
+                top_gen = gen_evs[0]
+                gap_val = top_gen.observed_value
                 title_str = "Performance Discrepancy Between Training and Evaluation Partitions"
                 root_str = "Generalization Deficit on Unseen Evaluation Partitions"
-                diag_interp = "The model demonstrates a measurable performance gap between training split fit and independent evaluation partitions."
-                sev = "HIGH" if max_mag >= 0.50 and total_rows >= 40 else "MEDIUM"
+                diag_interp = f"The model demonstrates a measurable performance gap ({gap_val:.1%} drop) between training split fit and independent evaluation partitions."
+                sev = "HIGH" if (max_mag >= 0.50 and total_rows >= 40) or gap_val >= 0.20 else "MEDIUM"
                 should_emit_gen_candidate = True
             elif part_evs:
                 top_part = part_evs[0]
-                if top_part.observed_value >= 0.10 or top_part.magnitude >= 0.50:
+                if top_part.observed_value >= 0.08 or top_part.magnitude >= 0.50:
                     title_str = "Cross-Validation Partition Variance Across Folds"
                     root_str = "Model Performance Sensitive to Data Partitioning"
                     diag_interp = "Model performance varies across cross-validation folds, indicating sensitivity to specific data split boundaries."
@@ -332,14 +340,14 @@ class DiagnosticEngine:
                         evidence_list=[f_ev],
                         interpretation=f"The model derives a dominant portion of its predictive utility from feature '{feat_name}' alongside observed partition or cross-model sensitivity.",
                         potential_explanation="High univariate association or lack of complementary predictive signals in other predictors.",
-                        impact=f"Model performance is vulnerable to measurement errors or distribution drift in '{feat_name}'.",
+                        impact=f"Operational consideration: Because the selected model exhibits strong empirical reliance on '{feat_name}', production monitoring should track changes in its distribution and data-collection process. The current experiments do not establish that such shifts will degrade production performance.",
                         severity="MEDIUM",
                         confidence=conf_label,
                         confidence_score=conf_score,
                         affected_metric="Predictive Robustness",
                         affected_population=f"Feature '{feat_name}'",
                         selected_model_name=selected_model_name,
-                        recommended_action=f"Verify data collection robustness for '{feat_name}' and evaluate model performance without this feature."
+                        recommended_action=f"If deployed, monitor distribution drift and data-quality changes in '{feat_name}' over time, audit data collection integrity, and evaluate alternative model configurations if reducing feature concentration is operationally necessary."
                     ))
                     candidate_idx += 1
 
@@ -440,6 +448,13 @@ class DiagnosticEngine:
                 "candidate_id": "DC_001",
                 "title": "Healthy Baseline Model Performance",
                 "finding": "Healthy Baseline Model Performance",
+                "signal": "Healthy Baseline Model Performance",
+                "initial_evidence": "Evaluation scores align with cross-validation stability estimates across partitions.",
+                "hypothesis": "Model operating in a healthy regime with consistent generalization across partitions.",
+                "diagnostic_status": "SIGNAL DETECTED",
+                "verification_status": "NOT TESTED",
+                "verification_score": "N/A",
+                "verification_evidence": "No anomaly detected requiring counterfactual verification.",
                 "root_cause": "No dominant model deficit or diagnostic anomaly detected from available evidence",
                 "category": "Diagnostic Observation",
                 "domain": "generalization",
@@ -497,10 +512,19 @@ class DiagnosticEngine:
 
         conf_strength = "HIGH" if confidence_score >= 0.72 else ("MODERATE" if confidence_score >= 0.48 else "LOW")
 
+        diag_status = "CANDIDATE HYPOTHESIS" if domain in {"feature_reliance", "generalization", "partition_stability", "class_performance"} else "SIGNAL DETECTED"
+
         return {
             "candidate_id": candidate_id,
             "title": title,
             "finding": title,
+            "signal": title,
+            "initial_evidence": " ".join(ev_summaries),
+            "hypothesis": potential_explanation or root_cause,
+            "diagnostic_status": diag_status,
+            "verification_status": "NOT TESTED",
+            "verification_score": "N/A",
+            "verification_evidence": "Controlled counterfactual experiments not yet executed for this candidate.",
             "root_cause": root_cause,
             "category": category,
             "domain": domain,
@@ -960,7 +984,7 @@ class RecommendationEngine:
                 add_rec(
                     action, "feature_reliance",
                     reason=cand.get("interpretation", "Model relies heavily on single predictor."),
-                    objective="Diversify predictor representation and mitigate single-feature drift vulnerability.",
+                    objective="Diversify predictor representation and, if deployed, monitor distribution drift and data-quality changes in input features over time.",
                     priority="MEDIUM",
                     evidence_ids=ev_ids
                 )

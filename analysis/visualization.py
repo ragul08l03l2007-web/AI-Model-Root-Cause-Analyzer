@@ -151,32 +151,45 @@ def build_risk_gauge_chart(result: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def build_risk_breakdown_chart(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Builds a horizontal bar chart showing points contributed by each risk domain."""
-    risk_info = result.get("risk", result.get("overall_risk", {}))
+    """
+    Builds a horizontal bar chart showing points contributed by each risk domain.
+    Consumes authoritative risk drivers directly from result['risk']['drivers'] / breakdown
+    without independent re-calculation or arbitrary fallback constants.
+    """
+    risk_info = result.get("risk", result.get("risk_assessment", result.get("overall_risk", {})))
     drivers = []
     if isinstance(risk_info, dict):
         drivers = risk_info.get("drivers", [])
 
-    if not drivers:
-        root_causes = result.get("root_causes_structured", [])
-        for rc in root_causes:
-            sev = rc.get("severity", "MEDIUM")
-            pts = 30 if sev == "CRITICAL" else (20 if sev == "HIGH" else (10 if sev == "MEDIUM" else 5))
-            drivers.append({
-                "domain": rc.get("category", rc.get("domain", "General")),
-                "issue": rc.get("finding", rc.get("root_cause", "Diagnostic Finding")),
-                "points": pts,
-                "severity": sev
-            })
-
-    if not drivers:
-        return None
+    domain_name_map = {
+        "data_integrity": "Data Quality & Hygiene",
+        "generalization": "Generalization & Stability",
+        "performance": "Performance Deficit",
+        "error_disparity": "Error Disparity",
+        "leakage": "Target Data Leakage",
+        "sample_size": "Sample Uncertainty",
+    }
 
     domain_pts: Dict[str, float] = {}
-    for d in drivers:
-        dom = d.get("domain", "General").title()
-        pts = float(d.get("points", 10))
-        domain_pts[dom] = domain_pts.get(dom, 0.0) + pts
+
+    if drivers:
+        for d in drivers:
+            raw_dom = str(d.get("domain", "General")).lower()
+            dom_label = domain_name_map.get(raw_dom, str(d.get("domain", "General")).replace("_", " ").title())
+            pts = _safe_float(d.get("contribution", d.get("points", 0.0)))
+            if pts > 0:
+                domain_pts[dom_label] = domain_pts.get(dom_label, 0.0) + pts
+    elif isinstance(risk_info, dict) and "breakdown" in risk_info:
+        breakdown = risk_info.get("breakdown", {})
+        if isinstance(breakdown, dict):
+            for k, v in breakdown.items():
+                pts = _safe_float(v)
+                if pts > 0:
+                    dom_label = domain_name_map.get(str(k).lower(), str(k).replace("_", " ").title())
+                    domain_pts[dom_label] = domain_pts.get(dom_label, 0.0) + pts
+
+    if not domain_pts or sum(domain_pts.values()) <= 0:
+        return None
 
     domains = list(domain_pts.keys())
     points = [domain_pts[k] for k in domains]
@@ -194,9 +207,10 @@ def build_risk_breakdown_chart(result: Dict[str, Any]) -> Optional[Dict[str, Any
         "hovertemplate": "<b>%{y}</b><br>Risk Contribution: +%{x} pts<extra></extra>"
     }]
 
-    layout = _default_layout("Risk Score Drivers by Domain", height=220)
+    chart_height = max(200, min(380, 80 + len(domains) * 45))
+    layout = _default_layout("Risk Score Drivers by Domain", height=chart_height)
     layout["xaxis"]["title"] = "Risk Points Contributed"
-    layout["margin"]["l"] = 120
+    layout["margin"]["l"] = 160
 
     return safe_primitive({"data": data, "layout": layout, "config": _default_config()})
 
@@ -216,7 +230,7 @@ def build_performance_metrics_chart(result: Dict[str, Any]) -> Dict[str, Any]:
         metric_keys = ["accuracy", "balanced_accuracy", "precision", "recall", "f1_score"]
         values = []
         for k in metric_keys:
-            v = perf.get(k, perf.get(f"weighted_{k}", 0.0))
+            v = perf.get(k, perf.get(f"test_{k}", perf.get(f"weighted_{k}", 0.0)))
             values.append(round(_safe_float(v) * 100, 2))
 
         data = [{
@@ -778,6 +792,144 @@ def build_feature_relationships_chart(result: Dict[str, Any]) -> Optional[Dict[s
 
 
 # ==============================================================================
+# 7. VERIFICATION & CLOSED-LOOP REMEDIATION CHARTS
+# ==============================================================================
+
+def build_verification_ablation_chart(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Builds a grouped bar chart comparing Baseline vs Ablated vs Permuted vs Noise Perturbed vs Control metrics
+    for each evaluated candidate feature.
+    """
+    verif = result.get("verification_engine", {})
+    experiments = verif.get("candidate_experiments", result.get("verification_experiments", []))
+    if not experiments or not isinstance(experiments, list):
+        return None
+
+    candidates = [str(exp.get("candidate_feature", f"Candidate {i+1}")) for i, exp in enumerate(experiments)]
+    baseline_vals = [_safe_float(exp.get("baseline_metric", 0.0)) for exp in experiments]
+    ablated_vals = [_safe_float(exp.get("ablated_metric", 0.0)) for exp in experiments]
+    permuted_vals = [_safe_float(exp.get("permuted_metric", 0.0)) for exp in experiments]
+    perturbed_vals = [_safe_float(exp.get("perturbed_metric", exp.get("baseline_metric", 0.0))) for exp in experiments]
+    control_vals = [_safe_float(exp.get("control_ablation_metric", 0.0)) for exp in experiments]
+
+    metric_name = experiments[0].get("metric_name", "Performance Metric")
+
+    data = [
+        {
+            "type": "bar",
+            "name": "Baseline Model",
+            "x": candidates,
+            "y": baseline_vals,
+            "marker": {"color": "#3b82f6"},
+            "text": [f"{v:.3f}" for v in baseline_vals],
+            "textposition": "auto",
+            "hovertemplate": "<b>%{x}</b><br>Baseline: %{y:.4f}<extra></extra>"
+        },
+        {
+            "type": "bar",
+            "name": "Retrained Feature Ablation",
+            "x": candidates,
+            "y": ablated_vals,
+            "marker": {"color": "#ef4444"},
+            "text": [f"{v:.3f} (Δ {exp.get('ablation_delta', 0):+.3f})" for v, exp in zip(ablated_vals, experiments)],
+            "textposition": "auto",
+            "hovertemplate": "<b>%{x}</b><br>Ablated: %{y:.4f}<extra></extra>"
+        },
+        {
+            "type": "bar",
+            "name": "Test-Time Permutation",
+            "x": candidates,
+            "y": permuted_vals,
+            "marker": {"color": "#8b5cf6"},
+            "text": [f"{v:.3f} (Δ {exp.get('permutation_delta', 0):+.3f})" for v, exp in zip(permuted_vals, experiments)],
+            "textposition": "auto",
+            "hovertemplate": "<b>%{x}</b><br>Permuted: %{y:.4f}<extra></extra>"
+        },
+        {
+            "type": "bar",
+            "name": "Measurement Stability (10% σ Jitter)",
+            "x": candidates,
+            "y": perturbed_vals,
+            "marker": {"color": "#f59e0b"},
+            "text": [f"{v:.3f} (Δ {exp.get('noise_delta', 0):+.3f})" for v, exp in zip(perturbed_vals, experiments)],
+            "textposition": "auto",
+            "hovertemplate": "<b>%{x}</b><br>Perturbed: %{y:.4f}<br>Flip Rate: %{text}<extra></extra>"
+        },
+        {
+            "type": "bar",
+            "name": "Control Feature Ablation",
+            "x": candidates,
+            "y": control_vals,
+            "marker": {"color": "#10b981"},
+            "text": [f"{v:.3f} (Δ {exp.get('control_delta', 0):+.3f})" for v, exp in zip(control_vals, experiments)],
+            "textposition": "auto",
+            "hovertemplate": "<b>%{x}</b><br>Control: %{y:.4f}<extra></extra>"
+        }
+    ]
+
+    layout = _default_layout("Controlled Feature Trials: Ablation, Permutation, Noise & Control", height=360)
+    layout["barmode"] = "group"
+    layout["yaxis"]["title"] = f"Evaluation Metric ({metric_name})"
+    layout["xaxis"]["title"] = "Candidate Features"
+
+    return safe_primitive({"data": data, "layout": layout, "config": _default_config()})
+
+
+def build_remediation_simulation_chart(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Builds a Before vs After remediation comparison chart (Train Score, Test Score, Generalization Gap).
+    """
+    verif = result.get("verification_engine", {})
+    remed = verif.get("remediation_simulation", result.get("remediation_simulation", {}))
+    if not remed or remed.get("status") != "Success":
+        return None
+
+    categories = ["Training Score", "Held-Out Test Score", "Generalization Gap"]
+    baseline_vals = [
+        _safe_float(remed.get("baseline", {}).get("train_score", 0.0)),
+        _safe_float(remed.get("baseline", {}).get("test_score", 0.0)),
+        _safe_float(remed.get("baseline", {}).get("generalization_gap", 0.0))
+    ]
+    remediated_vals = [
+        _safe_float(remed.get("remediated", {}).get("train_score", 0.0)),
+        _safe_float(remed.get("remediated", {}).get("test_score", 0.0)),
+        _safe_float(remed.get("remediated", {}).get("generalization_gap", 0.0))
+    ]
+
+    metric_name = remed.get("metric_name", "Metric")
+    resolution = str(remed.get("resolution_verdict", "Evaluated"))
+
+    data = [
+        {
+            "type": "bar",
+            "name": "Original Baseline Pipeline",
+            "x": categories,
+            "y": baseline_vals,
+            "marker": {"color": "#64748b"},
+            "text": [f"{v:.3f}" for v in baseline_vals],
+            "textposition": "auto",
+            "hovertemplate": "<b>%{x}</b><br>Original: %{y:.4f}<extra></extra>"
+        },
+        {
+            "type": "bar",
+            "name": "Remediated Pipeline",
+            "x": categories,
+            "y": remediated_vals,
+            "marker": {"color": "#2563eb"},
+            "text": [f"{v:.3f}" for v in remediated_vals],
+            "textposition": "auto",
+            "hovertemplate": "<b>%{x}</b><br>Remediated: %{y:.4f}<extra></extra>"
+        }
+    ]
+
+    layout = _default_layout(f"Closed-Loop Remediation Benchmark ({resolution})", height=340)
+    layout["barmode"] = "group"
+    layout["yaxis"]["title"] = f"Metric Value ({metric_name})"
+
+    return safe_primitive({"data": data, "layout": layout, "config": _default_config()})
+
+
+# ==============================================================================
 # MASTER GENERATOR
 # ==============================================================================
 
@@ -837,4 +989,140 @@ def generate_all_visualizations(result: Dict[str, Any]) -> Dict[str, Any]:
     if rel_chart:
         charts["feature_relationships"] = rel_chart
 
+    # 7. Verification & Closed-Loop Remediation
+    verif_ablation = build_verification_ablation_chart(result)
+    if verif_ablation:
+        charts["verification_ablation"] = verif_ablation
+
+    remed_chart = build_remediation_simulation_chart(result)
+    if remed_chart:
+        charts["remediation_simulation"] = remed_chart
+
+    # 8. Multi-Experiment Evidence Graph
+    ev_graph_chart = build_evidence_graph_spec(result)
+    if ev_graph_chart:
+        charts["evidence_graph"] = ev_graph_chart
+
     return safe_primitive(charts)
+
+
+def build_evidence_graph_spec(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Builds an interactive Plotly Sankey / Directed Graph specification for the
+    Multi-Experiment Evidence Graph, tracing candidate features through counterfactual
+    experiments, evidence fusion, verdicts, and closed-loop remediation.
+    """
+    graph = result.get("evidence_graph") or result.get("verification_engine", {}).get("evidence_graph", {})
+    if not graph or not graph.get("nodes"):
+        return None
+
+    nodes = graph.get("nodes", [])
+    edges = graph.get("edges", [])
+
+    if not nodes:
+        return None
+
+    # Map node id to index in nodes array
+    node_id_to_idx = {n["id"]: i for i, n in enumerate(nodes)}
+
+    # Color palette for node types
+    type_colors = {
+        "candidate": "#3b82f6",              # Blue
+        "feature_importance": "#6366f1",     # Indigo
+        "ablation_experiment": "#8b5cf6",    # Purple
+        "permutation_experiment": "#a855f7", # Fuchsia
+        "stability_experiment": "#0ea5e9",   # Sky
+        "control_experiment": "#14b8a6",     # Teal
+        "evidence_fusion": "#f59e0b",        # Amber
+        "verdict": "#10b981",                # Emerald Green (customized below if rejected)
+        "intervention": "#0284c7",           # Cyan
+        "remediation_result": "#2563eb",     # Royal Blue
+        "resolution": "#059669",             # Dark Emerald
+    }
+
+    node_labels = []
+    node_colors = []
+    custom_data = []
+
+    for n in nodes:
+        ntype = n.get("type", "candidate")
+        label = n.get("label", n.get("id"))
+        base_color = type_colors.get(ntype, "#64748b")
+
+        # Specific verdict / status color tweaks
+        if ntype == "verdict":
+            v_status = n.get("data", {}).get("status", "")
+            if v_status == "REJECTED" or "NO MEASURABLE" in n.get("data", {}).get("verdict", ""):
+                base_color = "#94a3b8"  # Slate Gray
+            elif v_status == "UNTESTED" or "NOT TESTED" in n.get("data", {}).get("verdict", ""):
+                base_color = "#cbd5e1"
+            elif "BRITTLENESS" in n.get("data", {}).get("verdict", ""):
+                base_color = "#ef4444"  # Red
+
+        node_labels.append(label)
+        node_colors.append(base_color)
+        custom_data.append(f"Type: {ntype}<br>Feature: {n.get('candidate_feature', 'N/A')}")
+
+    # Build links
+    sources = []
+    targets = []
+    values = []
+    link_labels = []
+    link_colors = []
+
+    for e in edges:
+        src = e.get("source")
+        tgt = e.get("target")
+        if src in node_id_to_idx and tgt in node_id_to_idx:
+            src_idx = node_id_to_idx[src]
+            tgt_idx = node_id_to_idx[tgt]
+            weight = max(0.2, _safe_float(e.get("weight", 1.0)))
+            relation = e.get("relation", "links_to")
+
+            sources.append(src_idx)
+            targets.append(tgt_idx)
+            values.append(weight)
+            link_labels.append(relation)
+            link_colors.append("rgba(148, 163, 184, 0.35)")
+
+    if not sources or not targets:
+        return None
+
+    sankey_trace = {
+        "type": "sankey",
+        "orientation": "h",
+        "node": {
+            "pad": 15,
+            "thickness": 18,
+            "line": {"color": "#334155", "width": 0.5},
+            "label": node_labels,
+            "color": node_colors,
+            "customdata": custom_data,
+            "hovertemplate": "<b>%{label}</b><br>%{customdata}<extra></extra>"
+        },
+        "link": {
+            "source": sources,
+            "target": targets,
+            "value": values,
+            "label": link_labels,
+            "color": link_colors,
+            "hovertemplate": "<b>%{source.label}</b> &rarr; <b>%{target.label}</b><br>Relation: %{label}<br>Weight: %{value:.2f}<extra></extra>"
+        }
+    }
+
+    summary = graph.get("summary", {})
+    verified = ", ".join(summary.get("verified_candidates", [])) or "None"
+    total_nodes = summary.get("total_nodes", len(nodes))
+    total_edges = summary.get("total_edges", len(edges))
+
+    layout = _default_layout(f"Multi-Experiment Evidence Graph (Verified: {verified} | {total_nodes} Nodes, {total_edges} Edges)", height=420)
+
+    return safe_primitive({
+        "data": [sankey_trace],
+        "layout": layout,
+        "config": _default_config(),
+        "graph_summary": summary,
+        "graph_validation": graph.get("validation", {}),
+    })
+
+

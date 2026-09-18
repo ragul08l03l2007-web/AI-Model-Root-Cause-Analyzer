@@ -39,3 +39,6 @@ outputs/
 .env
 .env.*
 !.env.example
+
+# Scratch scripts
+scratch/

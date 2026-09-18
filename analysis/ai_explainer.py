@@ -147,6 +147,46 @@ def extract_evidence_payload(
         "risk_score": int(model_result.get("risk_score", 0))
     }
 
+    # 8. Verification & Closed-Loop Remediation
+
+    verif_exp = model_result.get("verification_engine", {}).get("candidate_experiments", [])
+    if not verif_exp:
+        verif_exp = model_result.get("verification_experiments", [])
+    remed_sim = model_result.get("verification_engine", {}).get("remediation_simulation", {})
+    if not remed_sim:
+        remed_sim = model_result.get("remediation_simulation", {})
+
+    verification_summary = []
+    for exp in verif_exp:
+        verification_summary.append({
+            "candidate": exp.get("candidate_feature"),
+            "metric": exp.get("metric_name"),
+            "baseline": exp.get("baseline_metric"),
+            "ablation_delta": exp.get("ablation_delta"),
+            "permutation_delta": exp.get("permutation_delta"),
+            "perturbed_metric": exp.get("perturbed_metric"),
+            "noise_delta": exp.get("noise_delta"),
+            "prediction_flip_rate_pct": exp.get("prediction_flip_rate_pct"),
+            "noise_sensitivity": exp.get("noise_sensitivity"),
+            "control_feature": exp.get("control_feature"),
+            "control_delta": exp.get("control_delta"),
+            "evidence_ratings": exp.get("evidence_ratings", {}),
+            "score_decomposition": exp.get("score_decomposition", {}),
+            "verdict": exp.get("verdict"),
+            "evidence_score": exp.get("evidence_score")
+        })
+
+    completed_experiments = []
+    if verif_exp:
+        completed_experiments.extend([
+            "retrained_feature_ablation",
+            "test_time_permutation",
+            "measurement_stability",
+            "control_feature_test"
+        ])
+    if remed_sim and remed_sim.get("status") == "Success":
+        completed_experiments.append("closed_loop_remediation")
+
     payload = {
         "task_type": task_type,
         "dataset_summary": dataset_summary,
@@ -155,10 +195,19 @@ def extract_evidence_payload(
         "model_stability": model_stability,
         "root_causes": root_causes_cleaned,
         "feature_importance": feat_cleaned,
-        "overall_risk": overall_risk
+        "overall_risk": overall_risk,
+        "completed_experiments": completed_experiments,
+        "completed_verification_experiments": completed_experiments,
+        "verification_experiments": verification_summary,
+        "remediation_simulation": {
+            "resolution_verdict": remed_sim.get("resolution_verdict", "None"),
+            "test_metric_delta": remed_sim.get("deltas", {}).get("test_metric_delta", 0.0),
+            "generalization_gap_reduction": remed_sim.get("deltas", {}).get("generalization_gap_reduction", 0.0)
+        } if remed_sim else {}
     }
 
     return safe_primitive(payload)
+
 
 
 class AIExplainer:

@@ -611,9 +611,77 @@ tr:hover td {
     background: #f8fafc;
 }
 
+/* Verification Engine Styling */
+.verif-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+.verif-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f1f5f9;
+}
+.verif-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 14px;
+}
+.verif-box {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px 14px;
+}
+.verif-box-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 4px;
+}
+.verif-box-val {
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f172a;
+}
+.verif-box-sub {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 2px;
+}
+.verif-evidence-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 10px;
+    font-size: 13px;
+    color: #334155;
+}
+.remed-card {
+    background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
+    border: 1px solid #bbf7d0;
+    border-left: 6px solid #16a34a;
+    border-radius: 14px;
+    padding: 22px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 16px rgba(22, 163, 74, 0.06);
+}
+
 /* AI Explainer & Copilot Styling */
 .ai-card {
     background: linear-gradient(135deg, #f8faff 0%, #ffffff 100%);
+
     border: 1px solid #c7d2fe;
     border-left: 6px solid #4f46e5;
     border-radius: 14px;
@@ -1380,6 +1448,12 @@ def dashboard_page():
             finding_title = safe(rc.get("finding", rc.get("root_cause", "Diagnostic Finding")))
             category_label = safe(rc.get("category", "Root Cause Candidate"))
             evidence_text = safe(rc.get("evidence", ""))
+            initial_evidence = safe(rc.get("initial_evidence", evidence_text))
+            hypothesis_text = safe(rc.get("hypothesis", rc.get("potential_explanation", "")))
+            diagnostic_status = safe(rc.get("diagnostic_status", "SIGNAL DETECTED"))
+            verif_status = safe(rc.get("verification_status", "NOT TESTED"))
+            verif_score = safe(rc.get("verification_score", ""))
+            verif_evidence = safe(rc.get("verification_evidence", ""))
             interpretation_text = safe(rc.get("interpretation", ""))
             explanation_text = safe(rc.get("potential_explanation", ""))
             impact_text = safe(rc.get("impact", ""))
@@ -1387,20 +1461,25 @@ def dashboard_page():
             recommendation_text = safe(rc.get("recommended_action", ""))
             affected_area = safe(rc.get("affected_metric", "Generalization"))
 
+            status_badge_class = "badge-high" if "VERIFIED" in diagnostic_status else ("badge-good" if "NO MEASURABLE" in diagnostic_status else "badge-info")
+
             root_causes_html += (
                 f'<div class="root-cause-card {card_class}">\n'
                 f'<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">\n'
                 f'<div><strong style="font-size:16px; color:#0f172a;">{finding_title}</strong> &mdash; <span class="badge badge-info">{category_label}</span></div>\n'
-                f'<div><span class="badge {sev_class}">{sev} Severity</span> '
-                f'<span class="badge badge-good">{confidence_level} Evidence Confidence</span></div>\n'
+                f'<div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">'
+                f'<span class="badge {status_badge_class}">Status: {diagnostic_status}</span> '
+                f'<span class="badge {sev_class}">{sev} Severity</span> '
+                f'<span class="badge badge-good">{confidence_level} Confidence</span></div>\n'
                 f'</div>\n'
-                f'<div style="font-size:14px; margin-bottom:6px; color:#0f172a;"><strong>Evidence:</strong> {evidence_text}</div>\n'
-                f'<div style="font-size:13px; color:#334155; margin-bottom:5px;"><strong>Interpretation:</strong> {interpretation_text}</div>\n'
-                f'<div style="font-size:13px; color:#475569; margin-bottom:5px;"><strong>Potential Explanation:</strong> {explanation_text}</div>\n'
-                f'<div style="font-size:13px; color:#991b1b; margin-bottom:5px;"><strong>Operational Impact:</strong> {impact_text}</div>\n'
-                f'<div style="font-size:13px; color:#1e3a8a; margin-bottom:5px; background:#eff6ff; padding:8px 12px; border-radius:6px;"><strong>Actionable Recommendation:</strong> {recommendation_text}</div>\n'
-                f'<div style="font-size:12px; color:#64748b; margin-top:4px;"><strong>Diagnostic Domain:</strong> {affected_area}</div>\n'
-                f'</div>\n'
+                f'<div style="font-size:14px; margin-bottom:6px; color:#0f172a;"><strong>Signal &amp; Initial Evidence:</strong> {initial_evidence}</div>\n'
+                f'<div style="font-size:13px; color:#334155; margin-bottom:5px;"><strong>Candidate Hypothesis:</strong> {hypothesis_text}</div>\n'
+                + (f'<div style="font-size:13px; color:#1e3a8a; margin-bottom:5px; background:#eff6ff; padding:8px 12px; border-radius:6px;"><strong>Controlled Verification:</strong> {verif_status}' + (f' &mdash; <em>{verif_score}</em>' if verif_score and verif_score != 'N/A' else '') + (f'<div style="font-size:12px; color:#475569; margin-top:2px;">{verif_evidence}</div>' if verif_evidence else '') + '</div>\n' if verif_status and verif_status != 'NOT TESTED' else '')
+                + f'<div style="font-size:13px; color:#334155; margin-bottom:5px;"><strong>Diagnostic Interpretation:</strong> {interpretation_text}</div>\n'
+                + f'<div style="font-size:13px; color:#991b1b; margin-bottom:5px;"><strong>Operational Impact:</strong> {impact_text}</div>\n'
+                + f'<div style="font-size:13px; color:#14532d; margin-bottom:5px; background:#f0fdf4; padding:8px 12px; border-radius:6px; border:1px solid #dcfce7;"><strong>Actionable Recommendation:</strong> {recommendation_text}</div>\n'
+                + f'<div style="font-size:12px; color:#64748b; margin-top:4px;"><strong>Diagnostic Domain:</strong> {affected_area}</div>\n'
+                + f'</div>\n'
             )
     else:
         root_causes_strings = result.get("root_causes", [])
@@ -1942,6 +2021,10 @@ def dashboard_page():
         chart_boxes.append('<div class="chart-box" data-category="errors"><div id="chart-residual-plot" class="chart-container"></div></div>')
     if "residual_distribution" in vis:
         chart_boxes.append('<div class="chart-box" data-category="errors"><div id="chart-residual-dist" class="chart-container"></div></div>')
+    if "verification_ablation" in vis:
+        chart_boxes.append('<div class="chart-box" data-category="verif"><div id="chart-verif-ablation" class="chart-container"></div></div>')
+    if "remediation_simulation" in vis:
+        chart_boxes.append('<div class="chart-box" data-category="verif"><div id="chart-remed-sim" class="chart-container"></div></div>')
 
     chart_payload_map = {
         "chart-risk-gauge": vis.get("risk_gauge"),
@@ -1956,6 +2039,8 @@ def dashboard_page():
         "chart-actual-vs-pred": vis.get("actual_vs_predicted"),
         "chart-residual-plot": vis.get("residual_plot"),
         "chart-residual-dist": vis.get("residual_distribution"),
+        "chart-verif-ablation": vis.get("verification_ablation"),
+        "chart-remed-sim": vis.get("remediation_simulation"),
     }
     clean_map = {k: v for k, v in chart_payload_map.items() if v is not None}
     chart_json = json.dumps(clean_map).replace("</script>", "<\\/script>")
@@ -1965,6 +2050,7 @@ def dashboard_page():
         '<div class="card" style="padding:16px 20px 24px; margin-bottom:24px;">\n'
         '<div class="chart-tabs">\n'
         '<button class="chart-tab-btn active" type="button" onclick="switchChartTab(\'all\', this)">All Charts</button>\n'
+        '<button class="chart-tab-btn" type="button" onclick="switchChartTab(\'verif\', this)">🔬 Verification &amp; Remediation</button>\n'
         '<button class="chart-tab-btn" type="button" onclick="switchChartTab(\'risk\', this)">Risk &amp; Health</button>\n'
         '<button class="chart-tab-btn" type="button" onclick="switchChartTab(\'perf\', this)">Performance &amp; CV</button>\n'
         '<button class="chart-tab-btn" type="button" onclick="switchChartTab(\'feats\', this)">Feature Impact</button>\n'
@@ -1997,6 +2083,147 @@ window.addEventListener("resize", function() {
     });
 });
 </script>\n"""
+    )
+
+    # --------------------------------------------------------
+    # 4b. Automated Root-Cause Verification & Closed-Loop Remediation Matrix
+    # --------------------------------------------------------
+    verif_data = result.get("verification_engine", {})
+    candidate_experiments = verif_data.get("candidate_experiments", result.get("verification_experiments", []))
+    remed_sim = verif_data.get("remediation_simulation", result.get("remediation_simulation", {}))
+
+    verif_cards_html = ""
+    if candidate_experiments and isinstance(candidate_experiments, list):
+        for exp in candidate_experiments:
+            cand_name = safe(exp.get("candidate_feature", "Candidate Feature"))
+            metric_label = safe(exp.get("metric_name", "Weighted F1" if task_type == "classification" else "R2 Score"))
+            base_val = number(exp.get("baseline_metric", 0.0))
+            abl_val = number(exp.get("ablated_metric", 0.0))
+            abl_delta = number(exp.get("ablation_delta", 0.0))
+            abl_delta_pct = number(exp.get("ablation_delta_pct", 0.0))
+            perm_val = number(exp.get("permuted_metric", 0.0))
+            perm_delta = number(exp.get("permutation_delta", 0.0))
+            perm_delta_pct = number(exp.get("permutation_delta_pct", 0.0))
+            pert_val = number(exp.get("perturbed_metric", base_val))
+            noise_delta = number(exp.get("noise_delta", 0.0))
+            noise_delta_pct = number(exp.get("noise_delta_pct", 0.0))
+            flip_pct = number(exp.get("prediction_flip_rate_pct", 0.0))
+            ctrl_feat = safe(exp.get("control_feature", "None"))
+            ctrl_val = number(exp.get("control_ablation_metric", 0.0))
+            ctrl_delta = number(exp.get("control_delta", 0.0))
+            ratings = exp.get("evidence_ratings", {})
+            abl_rating = safe(ratings.get("ablation", "neutral"))
+            perm_rating = safe(ratings.get("permutation", "neutral"))
+            noise_rating = safe(ratings.get("noise", exp.get("noise_sensitivity", "robust")))
+            ctrl_rating = safe(ratings.get("control", "inconclusive"))
+            verdict = safe(exp.get("verdict", "PARTIAL / INTERACTIVE SIGNAL"))
+            ev_score = int(number(exp.get("evidence_score", 0)))
+            summary_text = safe(exp.get("summary", ""))
+
+            decomp = exp.get("score_decomposition", {})
+            abl_pts = int(decomp.get("ablation_points", 0))
+            perm_pts = int(decomp.get("permutation_points", 0))
+            ctrl_pts = int(decomp.get("control_points", 0))
+            stab_pts = int(decomp.get("stability_points", 0))
+            const_pts = int(decomp.get("consistency_points", 0))
+            decomp_str = f"Ablation: {abl_pts}/35 · Permutation: {perm_pts}/35 · Control: {ctrl_pts}/15 · Stability: {stab_pts}/10 · Consistency: {const_pts}/5"
+
+            if "VERIFIED" in verdict:
+                verdict_badge_class = "badge-good"
+            elif "NO MEASURABLE" in verdict:
+                verdict_badge_class = "badge-info"
+            elif "BRITTLENESS" in verdict:
+                verdict_badge_class = "badge-high"
+            else:
+                verdict_badge_class = "badge-medium"
+
+            if ctrl_rating == "passed":
+                ctrl_badge_class = "badge-good"
+            elif ctrl_rating == "inconclusive":
+                ctrl_badge_class = "badge-medium"
+            else:
+                ctrl_badge_class = "badge-high"
+
+            verif_cards_html += (
+                f'<div class="verif-card">\n'
+                f'<div class="verif-header">\n'
+                f'<div><strong style="font-size:16px; color:#0f172a;">Candidate: <code>{cand_name}</code></strong> '
+                f'<span class="badge {verdict_badge_class}" style="margin-left:8px;">{verdict}</span></div>\n'
+                f'<div style="text-align:right;">'
+                f'<div><span style="font-size:13px; font-weight:700; color:#475569;">Evidence Score: </span>'
+                f'<strong style="font-size:18px; color:{"#2563eb" if ev_score > 30 else "#475569"};">{ev_score}/100</strong></div>\n'
+                f'<div style="font-size:11px; color:#64748b; font-weight:600; margin-top:2px;">{decomp_str}</div>'
+                f'</div>\n'
+                f'</div>\n'
+                f'<div class="verif-metric-grid">\n'
+                f'<div class="verif-box"><div class="verif-box-label">1. Baseline ({metric_label})</div><div class="verif-box-val">{base_val:.4f}</div><div class="verif-box-sub">Full model</div></div>\n'
+                f'<div class="verif-box"><div class="verif-box-label">2. Retrained Ablation</div><div class="verif-box-val">{abl_val:.4f}</div><div class="verif-box-sub" style="color:{"#dc2626" if abl_delta < 0 else "#166534"}; font-weight:700;">delta: {abl_delta:+.4f} ({abl_delta_pct:+.1f}%)</div></div>\n'
+                f'<div class="verif-box"><div class="verif-box-label">3. Permutation Test</div><div class="verif-box-val">{perm_val:.4f}</div><div class="verif-box-sub" style="color:{"#dc2626" if perm_delta < 0 else "#166534"}; font-weight:700;">delta: {perm_delta:+.4f} ({perm_delta_pct:+.1f}%)</div></div>\n'
+                f'<div class="verif-box"><div class="verif-box-label">4. Measurement Stability (10% σ Jitter)</div><div class="verif-box-val">{pert_val:.4f}</div><div class="verif-box-sub" style="color:{"#dc2626" if noise_delta < -0.05 or flip_pct >= 15 else "#166534"}; font-weight:700;">delta: {noise_delta:+.4f} (flip: {flip_pct:.1f}%)</div></div>\n'
+                f'<div class="verif-box"><div class="verif-box-label">5. Control ({ctrl_feat})</div><div class="verif-box-val">{ctrl_val:.4f}</div><div class="verif-box-sub">delta: {ctrl_delta:+.4f}</div></div>\n'
+                f'</div>\n'
+                f'<div class="verif-evidence-row">\n'
+                f'<span><strong>4 Controlled Trials:</strong></span>'
+                f'<span>Ablation: <span class="badge badge-info">{abl_rating}</span></span>'
+                f'<span>Permutation: <span class="badge badge-info">{perm_rating}</span></span>'
+                f'<span>Measurement Stability: <span class="badge badge-info">{noise_rating}</span></span>'
+                f'<span>Control Test: <span class="badge {ctrl_badge_class}">{ctrl_rating}</span></span>'
+                f'</div>\n'
+                f'<div style="font-size:13px; color:#334155; line-height:1.5; background:#f8fafc; padding:10px 14px; border-radius:8px; border:1px solid #e2e8f0;">{summary_text}</div>\n'
+                f'</div>\n'
+            )
+
+    remediation_sim_html = ""
+    if remed_sim and remed_sim.get("status") == "Success":
+        res_verdict = safe(remed_sim.get("resolution_verdict", "Evaluated"))
+        proof_summary = safe(remed_sim.get("proof_summary", ""))
+        metric_lbl = safe(remed_sim.get("metric_name", "Metric"))
+        b_train = number(remed_sim.get("baseline", {}).get("train_score", 0.0))
+        b_test = number(remed_sim.get("baseline", {}).get("test_score", 0.0))
+        b_gap = number(remed_sim.get("baseline", {}).get("generalization_gap", 0.0))
+        r_train = number(remed_sim.get("remediated", {}).get("train_score", 0.0))
+        r_test = number(remed_sim.get("remediated", {}).get("test_score", 0.0))
+        r_gap = number(remed_sim.get("remediated", {}).get("generalization_gap", 0.0))
+        d_test = number(remed_sim.get("deltas", {}).get("test_metric_delta", 0.0))
+        d_gap = number(remed_sim.get("deltas", {}).get("generalization_gap_reduction", 0.0))
+
+        if "BOTH IMPROVED" in res_verdict or "PERFORMANCE IMPROVED" in res_verdict:
+            res_badge_class = "badge-good"
+        elif "PARTIALLY RESOLVED" in res_verdict:
+            res_badge_class = "badge-info"
+        elif "BASELINE PREFERRED" in res_verdict:
+            res_badge_class = "badge-high"
+        else:
+            res_badge_class = "badge-medium"
+
+        remediation_sim_html = (
+            f'<div class="remed-card">\n'
+            f'<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid #dcfce7;">\n'
+            f'<div><strong style="font-size:18px; color:#14532d;">🔄 Closed-Loop Remediation Simulation &amp; Proof of Fix</strong></div>\n'
+            f'<div><span class="badge {res_badge_class}" style="font-size:13px; padding:6px 12px;">{res_verdict}</span></div>\n'
+            f'</div>\n'
+            f'<div class="verif-metric-grid">\n'
+            f'<div class="verif-box"><div class="verif-box-label">Baseline Test ({metric_lbl})</div><div class="verif-box-val">{b_test:.4f}</div><div class="verif-box-sub">Train: {b_train:.4f} | Gap: {b_gap:.4f}</div></div>\n'
+            f'<div class="verif-box"><div class="verif-box-label">Remediated Test ({metric_lbl})</div><div class="verif-box-val" style="color:#15803d;">{r_test:.4f}</div><div class="verif-box-sub">Train: {r_train:.4f} | Gap: {r_gap:.4f}</div></div>\n'
+            f'<div class="verif-box"><div class="verif-box-label">Change in Held-Out Performance</div><div class="verif-box-val" style="color:{"#15803d" if d_test >= 0 else "#dc2626"};">{d_test:+.4f}</div><div class="verif-box-sub">Held-out test delta</div></div>\n'
+            f'<div class="verif-box"><div class="verif-box-label">Train–Evaluation Gap Reduction</div><div class="verif-box-val" style="color:{"#15803d" if d_gap >= 0 else "#dc2626"};">{d_gap:+.4f}</div><div class="verif-box-sub">Generalization gap delta</div></div>\n'
+            f'</div>\n'
+            f'<div style="font-size:14px; color:#14532d; line-height:1.5;"><strong>Empirical Proof:</strong> {proof_summary}</div>\n'
+            f'</div>\n'
+        )
+
+    verification_matrix_html = (
+        '<div class="section-title">🔬 Automated Root-Cause Verification &amp; Closed-Loop Remediation Matrix</div>\n'
+        + (remediation_sim_html if remediation_sim_html else '')
+        + (
+            '<div class="card" style="margin-bottom:24px;">\n'
+            '<div class="note" style="margin-top:0; margin-bottom:16px;">\n'
+            '<strong>Controlled Counterfactual Verification:</strong> Rather than relying only on observational correlations, the engine runs targeted ablation retraining, test-time permutation shuffling, measurement stability testing, and baseline control tests on candidate features. Controlled ablation and permutation experiments measure empirical model reliance under the tested interventions; they do not establish real-world causal relationships. The Evidence Score reflects experimental proof strength with transparent, configurable diagnostic thresholds.\n'
+            '</div>\n'
+            + (verif_cards_html or '<div class="sub">No candidate features required ablation testing.</div>')
+            + '</div>\n'
+            if verif_cards_html else ''
+        )
     )
 
     ai_provider_name = CURRENT_AI_REPORT.get("provider", CURRENT_AI_EXPLAINER.get_active_provider_name())
@@ -2033,6 +2260,7 @@ window.addEventListener("resize", function() {
         + '</div>\n'
         '</div>\n'
     )
+
 
     copilot_html = (
         '<div class="section-title">💬 Interactive AI Diagnostic Copilot</div>\n'
@@ -2074,8 +2302,10 @@ window.addEventListener("resize", function() {
         + f'<span style="font-size:13px; font-weight:normal; color:#14532d;">{safe(task_reason)}</span></div>\n'
         + ai_executive_html
         + visual_center_html
+        + verification_matrix_html
         + model_selection_card_html
         + performance_html
+
         + model_comp_html
         + target_stats_html
         + '<div class="section-title">Model Stability &amp; Cross-Validation Folds</div>\n'
@@ -2083,7 +2313,7 @@ window.addEventListener("resize", function() {
         + cv_html
         + '</div>\n'
         + stability_cards_html
-        + '<div class="section-title">Evidence-Based Root-Cause Candidates</div>\n'
+        + '<div class="section-title">Diagnostic Signals &amp; Root-Cause Hypotheses</div>\n'
         + '<div class="card">\n'
         + (root_causes_html or '<div class="sub">No diagnostic bottlenecks identified.</div>')
         + '</div>\n'

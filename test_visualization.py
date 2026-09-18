@@ -56,7 +56,9 @@ def test_classification_visualizations():
         "cv_stability",
         "feature_importance",
         "target_distribution",
-        "confusion_matrix"
+        "confusion_matrix",
+        "verification_ablation",
+        "remediation_simulation"
     ]
 
     for key in expected_charts:
@@ -86,13 +88,16 @@ def test_regression_visualizations():
         "feature_importance",
         "actual_vs_predicted",
         "residual_plot",
-        "residual_distribution"
+        "residual_distribution",
+        "verification_ablation",
+        "remediation_simulation"
     ]
 
     for key in expected_charts:
         assert key in charts, f"Missing expected regression chart: {key}"
         _assert_valid_plotly_structure(charts[key], key)
         print(f"  -> Validated Plotly chart: {key} (Traces: {len(charts[key]['data'])})")
+
 
     # Verify regression-specific charts
     avp = charts["actual_vs_predicted"]

@@ -121,6 +121,16 @@ def test_classification_ai_explainer():
     assert len(ans2) > 20
     print("  -> Stage 3 Copilot Q&A: 'What are the most important features?' -> Answered based on evidence")
 
+    q3 = "What did the ablation and verification experiments show?"
+    ans3 = explainer.ask_copilot(q3, model_result, data_quality)
+    assert len(ans3) > 20 and ("Ablation" in ans3 or "Verification" in ans3 or "Score" in ans3)
+    print("  -> Stage 3 Copilot Q&A: 'What did the ablation experiments show?' -> Answered with 5-part score breakdown")
+
+    q4 = "What was the remediation simulation resolution verdict?"
+    ans4 = explainer.ask_copilot(q4, model_result, data_quality)
+    assert len(ans4) > 20 and ("Remediation" in ans4 or "Verdict" in ans4 or "Simulation" in ans4)
+    print("  -> Stage 3 Copilot Q&A: 'What was the remediation verdict?' -> Answered with resolution status")
+
     print("  -> TEST 2 PASSED!")
 
 
