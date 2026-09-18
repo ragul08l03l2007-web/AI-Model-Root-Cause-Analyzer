@@ -132,7 +132,28 @@ def run_test():
         assert "row" in err_csv and "actual" in err_csv
         print("-> GET /download/prediction-errors.csv passed")
 
-        # 9. GET /back-to-preview
+        # 9. GET /download/remediation_script.py
+        resp = urllib.request.urlopen(f"{base_url}/download/remediation_script.py")
+        assert resp.status == 200
+        script_content = resp.read().decode("utf-8")
+        assert len(script_content) > 50
+        compile(script_content, "<string>", "exec")
+        print("-> GET /download/remediation_script.py passed (valid Python syntax)")
+
+        # 10. POST /api/copilot/chat
+        chat_payload = json.dumps({"question": "Why is the model underperforming?"}).encode("utf-8")
+        chat_req = urllib.request.Request(
+            f"{base_url}/api/copilot/chat",
+            data=chat_payload,
+            headers={"Content-Type": "application/json"}
+        )
+        chat_resp = urllib.request.urlopen(chat_req)
+        assert chat_resp.status == 200
+        chat_json = json.loads(chat_resp.read().decode("utf-8"))
+        assert chat_json["status"] == "success" and "reply" in chat_json and len(chat_json["reply"]) > 10
+        print(f"-> POST /api/copilot/chat passed ({chat_json['provider']})")
+
+        # 11. GET /back-to-preview
         try:
             resp = opener.open(f"{base_url}/back-to-preview")
             status = resp.status

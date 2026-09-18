@@ -13,6 +13,7 @@ import pandas as pd
 
 from analysis.model_analyzer import analyze_model
 from analysis.data_quality import analyze_data_quality
+from analysis.ai_explainer import AIExplainer
 
 
 HOST = "localhost"
@@ -25,6 +26,9 @@ CURRENT_FILENAME = None
 CURRENT_TARGET = None
 CURRENT_MODE = "auto"
 CURRENT_ERROR = None
+CURRENT_AI_EXPLAINER = None
+CURRENT_AI_REPORT = None
+CURRENT_FIX_SCRIPT = None
 
 
 # ============================================================
@@ -188,6 +192,9 @@ def reset_state():
     global CURRENT_TARGET
     global CURRENT_MODE
     global CURRENT_ERROR
+    global CURRENT_AI_EXPLAINER
+    global CURRENT_AI_REPORT
+    global CURRENT_FIX_SCRIPT
 
     CURRENT_DATAFRAME = None
     CURRENT_RESULT = None
@@ -196,6 +203,9 @@ def reset_state():
     CURRENT_TARGET = None
     CURRENT_MODE = "auto"
     CURRENT_ERROR = None
+    CURRENT_AI_EXPLAINER = None
+    CURRENT_AI_REPORT = None
+    CURRENT_FIX_SCRIPT = None
 
 
 # ============================================================
@@ -597,6 +607,209 @@ tr:hover td {
     background: #f8fafc;
 }
 
+/* AI Explainer & Copilot Styling */
+.ai-card {
+    background: linear-gradient(135deg, #f8faff 0%, #ffffff 100%);
+    border: 1px solid #c7d2fe;
+    border-left: 6px solid #4f46e5;
+    border-radius: 14px;
+    padding: 24px;
+    box-shadow: 0 4px 20px rgba(79, 70, 229, 0.08);
+    margin-bottom: 24px;
+}
+
+.ai-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e0e7ff;
+}
+
+.ai-title {
+    font-size: 20px;
+    font-weight: 800;
+    color: #312e81;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ai-summary-text {
+    font-size: 15px;
+    line-height: 1.6;
+    color: #1e1b4b;
+    margin-bottom: 16px;
+}
+
+.roadmap-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.roadmap-item {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 14px;
+    color: #334155;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.roadmap-num {
+    background: #4f46e5;
+    color: white;
+    font-weight: 700;
+    font-size: 12px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.code-drawer {
+    margin-top: 18px;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    background: #0f172a;
+    overflow: hidden;
+}
+
+.code-drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #1e293b;
+    padding: 10px 16px;
+    color: #94a3b8;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.code-pre {
+    margin: 0;
+    padding: 16px;
+    color: #38bdf8;
+    background: #0f172a;
+    font-family: Consolas, Monaco, "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    overflow-x: auto;
+    max-height: 400px;
+}
+
+/* Copilot Chat UI */
+.copilot-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+.copilot-header {
+    background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+    color: white;
+    padding: 18px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.chat-history {
+    padding: 20px;
+    min-height: 240px;
+    max-height: 450px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    background: #f8fafc;
+}
+
+.chat-bubble {
+    max-width: 85%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.chat-bubble.ai {
+    background: white;
+    border: 1px solid #e2e8f0;
+    color: #0f172a;
+    align-self: flex-start;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.chat-bubble.user {
+    background: #4f46e5;
+    color: white;
+    align-self: flex-end;
+}
+
+.chips-row {
+    padding: 12px 20px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    background: #f1f5f9;
+    border-top: 1px solid #e2e8f0;
+}
+
+.prompt-chip {
+    background: white;
+    border: 1px solid #cbd5e1;
+    border-radius: 16px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #334155;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.prompt-chip:hover {
+    background: #e0e7ff;
+    border-color: #818cf8;
+    color: #312e81;
+}
+
+.chat-input-row {
+    display: flex;
+    gap: 10px;
+    padding: 16px 20px;
+    background: white;
+    border-top: 1px solid #e2e8f0;
+}
+
+.chat-input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+}
+
+.chat-input:focus {
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+}
+
 .footer {
     text-align: center;
     color: #64748b;
@@ -632,6 +845,66 @@ document.addEventListener("DOMContentLoaded", function() {
 </script>
 """
 
+COPILOT_JS = """
+<script>
+function askCopilot(questionText) {
+    var input = document.getElementById("copilot-input");
+    var q = questionText || (input ? input.value.trim() : "");
+    if (!q) return;
+
+    var history = document.getElementById("chat-history");
+    if (!history) return;
+
+    // Append user bubble
+    var userBubble = document.createElement("div");
+    userBubble.className = "chat-bubble user";
+    userBubble.textContent = q;
+    history.appendChild(userBubble);
+
+    if (input) input.value = "";
+
+    // Append loading bubble
+    var loadingBubble = document.createElement("div");
+    loadingBubble.className = "chat-bubble ai";
+    loadingBubble.innerHTML = "<em>Analyzing diagnostic evidence...</em>";
+    history.appendChild(loadingBubble);
+    history.scrollTop = history.scrollHeight;
+
+    fetch("/api/copilot/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: q })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+        var reply = data.reply || "No response received.";
+        // Format markdown bolding and newlines
+        reply = reply.replace(/\\*\\*(.*?)\\*\\*/g, "<strong>$1</strong>");
+        reply = reply.replace(/\\n/g, "<br>");
+        loadingBubble.innerHTML = reply;
+        history.scrollTop = history.scrollHeight;
+    })
+    .catch(function(err) {
+        loadingBubble.innerHTML = "<span style='color:#dc2626;'>Error contacting Copilot. Please try again.</span>";
+    });
+}
+
+function copyFixCode() {
+    var codeElem = document.getElementById("fix-script-code");
+    if (codeElem) {
+        navigator.clipboard.writeText(codeElem.textContent).then(function() {
+            var btn = document.getElementById("copy-code-btn");
+            if (btn) {
+                var oldText = btn.textContent;
+                btn.textContent = "Copied!";
+                setTimeout(function() { btn.textContent = oldText; }, 2000);
+            }
+        });
+    }
+}
+</script>
+"""
+
 
 def page_start(title="AI Model Root-Cause Analyzer"):
     return (
@@ -663,6 +936,7 @@ def page_end():
         "AI Model Root-Cause Analyzer &bull; Automated Diagnostic System\n"
         "</div>\n"
         "</div>\n"
+        + COPILOT_JS + "\n"
         "</body>\n"
         "</html>\n"
     )
@@ -1540,6 +1814,79 @@ def dashboard_page():
 
     total_features = int(number(performance.get("feature_count", len(df.columns) - 1)))
 
+    global CURRENT_AI_EXPLAINER
+    global CURRENT_AI_REPORT
+    global CURRENT_FIX_SCRIPT
+
+    if CURRENT_AI_EXPLAINER is None:
+        CURRENT_AI_EXPLAINER = AIExplainer()
+
+    if CURRENT_AI_REPORT is None:
+        CURRENT_AI_REPORT = CURRENT_AI_EXPLAINER.explain(result, quality)
+    if CURRENT_FIX_SCRIPT is None:
+        CURRENT_FIX_SCRIPT = CURRENT_AI_EXPLAINER.generate_fix_script(result, quality)
+
+    ai_provider_name = CURRENT_AI_REPORT.get("provider", CURRENT_AI_EXPLAINER.get_active_provider_name())
+    ai_summary = CURRENT_AI_REPORT.get("executive_summary", "")
+    risk_assessment = CURRENT_AI_REPORT.get("risk_assessment", {})
+    readiness = risk_assessment.get("deployment_readiness", "Requires Review")
+    roadmap = CURRENT_AI_REPORT.get("remediation_roadmap", [])
+
+    roadmap_html = "".join(
+        f'<div class="roadmap-item"><div class="roadmap-num">{idx}</div><div>{safe(step)}</div></div>\n'
+        for idx, step in enumerate(roadmap, 1)
+    )
+
+    ai_executive_html = (
+        '<div class="section-title">🤖 AI Executive Root-Cause Summary &amp; Remediation Plan</div>\n'
+        '<div class="ai-card">\n'
+        '<div class="ai-header">\n'
+        '<div class="ai-title">🤖 AI Reliability &amp; Root-Cause Audit</div>\n'
+        f'<div><span class="badge" style="background:#4338ca; color:#ffffff; font-weight:700;">⚡ {safe(ai_provider_name)}</span> '
+        f'<span class="badge badge-good" style="margin-left:6px;">Status: {safe(readiness)}</span></div>\n'
+        '</div>\n'
+        f'<div class="ai-summary-text">{safe(ai_summary)}</div>\n'
+        + (f'<div style="font-weight:700; color:#312e81; margin-top:14px; margin-bottom:6px;">Recommended Remediation Roadmap:</div>\n<div class="roadmap-list">\n{roadmap_html}</div>\n' if roadmap_html else '')
+        + '<div style="margin-top:20px; display:flex; gap:10px; flex-wrap:wrap;">\n'
+        + '<button class="btn btn-primary" type="button" style="background:#4f46e5; border-color:#4f46e5;" onclick="var d=document.getElementById(\'code-drawer\'); d.style.display=(d.style.display===\'none\'?\'block\':\'none\');">⚡ View Auto-Remediation Python Script</button>\n'
+        + '<a class="btn btn-secondary" href="/download/remediation_script.py" style="border-color:#c7d2fe; color:#312e81;">Download fix_pipeline.py</a>\n'
+        + '</div>\n'
+        + '<div id="code-drawer" class="code-drawer" style="display:none;">\n'
+        + '<div class="code-drawer-header">\n'
+        + '<span>Python Preprocessing &amp; Model Remediation Script</span>\n'
+        + '<button id="copy-code-btn" type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:12px;" onclick="copyFixCode()">Copy Code</button>\n'
+        + '</div>\n'
+        + f'<pre id="fix-script-code" class="code-pre">{safe(CURRENT_FIX_SCRIPT)}</pre>\n'
+        + '</div>\n'
+        '</div>\n'
+    )
+
+    copilot_html = (
+        '<div class="section-title">💬 Interactive AI Diagnostic Copilot</div>\n'
+        '<div class="copilot-card">\n'
+        '<div class="copilot-header">\n'
+        '<div><strong style="font-size:16px;">Diagnostic Copilot</strong> &mdash; Grounded in Empirical Dataset Evidence</div>\n'
+        f'<span class="badge" style="background:rgba(255,255,255,0.2); color:white;">{safe(ai_provider_name)}</span>\n'
+        '</div>\n'
+        '<div id="chat-history" class="chat-history">\n'
+        '<div class="chat-bubble ai">\n'
+        f'Hello! I am your AI Diagnostic Copilot. I have analyzed the model diagnostics for <strong>{safe(CURRENT_FILENAME)}</strong> on target <strong>{safe(CURRENT_TARGET)}</strong>. What questions do you have about the root causes, feature impacts, or remediation strategy?\n'
+        '</div>\n'
+        '</div>\n'
+        '<div class="chips-row">\n'
+        '<span style="font-size:12px; font-weight:700; color:#64748b; align-self:center;">Suggested:</span>\n'
+        '<button class="prompt-chip" type="button" onclick="askCopilot(\'Why did the model perform poorly?\')">Why did the model perform poorly?</button>\n'
+        '<button class="prompt-chip" type="button" onclick="askCopilot(\'Which feature causes the highest risk?\')">Which feature causes highest risk?</button>\n'
+        '<button class="prompt-chip" type="button" onclick="askCopilot(\'What is the recommended fix strategy?\')">Recommended fix strategy?</button>\n'
+        '<button class="prompt-chip" type="button" onclick="askCopilot(\'Is this model ready for production deployment?\')">Production readiness?</button>\n'
+        '</div>\n'
+        '<div class="chat-input-row">\n'
+        '<input id="copilot-input" class="chat-input" type="text" placeholder="Ask a question about the diagnostic results (e.g. why is recall low, which feature to remove?)..." onkeypress="if(event.key===\'Enter\') askCopilot();">\n'
+        '<button class="btn btn-primary" type="button" style="background:#4f46e5; border-color:#4f46e5;" onclick="askCopilot()">Send</button>\n'
+        '</div>\n'
+        '</div>\n'
+    )
+
     html = (
         page_start("Dashboard - AI Model Root-Cause Analyzer")
         + '<div class="btn-row" style="margin-bottom:24px;">\n'
@@ -1548,9 +1895,11 @@ def dashboard_page():
         + '<a class="btn btn-primary" href="/download/analysis.json">Download JSON</a>\n'
         + '<a class="btn btn-secondary" href="/download/summary.csv">Download Summary CSV</a>\n'
         + '<a class="btn btn-secondary" href="/download/prediction-errors.csv">Download Errors CSV</a>\n'
+        + '<a class="btn btn-secondary" href="/download/remediation_script.py" style="background:#4338ca; color:#ffffff; border-color:#4338ca;">⚡ Download Auto-Fix .py</a>\n'
         + '</div>\n'
         + f'<div class="success">Analyzed <strong>{safe(CURRENT_FILENAME)}</strong> using target <strong>{safe(CURRENT_TARGET)}</strong> with <strong>{safe(mode_label(task_type))}</strong> analysis.<br>'
         + f'<span style="font-size:13px; font-weight:normal; color:#14532d;">{safe(task_reason)}</span></div>\n'
+        + ai_executive_html
         + model_selection_card_html
         + performance_html
         + model_comp_html
@@ -1641,6 +1990,7 @@ def dashboard_page():
         + '<div class="card">\n'
         + warnings_html
         + '</div>\n'
+        + copilot_html
         + page_end()
     )
     return html
@@ -1870,6 +2220,24 @@ class AppHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if path in {"/download/remediation_script.py", "/download/fix_pipeline.py"}:
+            global CURRENT_FIX_SCRIPT
+            global CURRENT_AI_EXPLAINER
+            if CURRENT_FIX_SCRIPT is None:
+                if CURRENT_RESULT is not None:
+                    if CURRENT_AI_EXPLAINER is None:
+                        CURRENT_AI_EXPLAINER = AIExplainer()
+                    CURRENT_FIX_SCRIPT = CURRENT_AI_EXPLAINER.generate_fix_script(CURRENT_RESULT, CURRENT_DATA_QUALITY)
+                else:
+                    self.send_html("<h1>No analysis available.</h1>", 404)
+                    return
+            self.send_download(
+                "text/x-python; charset=utf-8",
+                "remediation_pipeline.py",
+                CURRENT_FIX_SCRIPT.encode("utf-8")
+            )
+            return
+
         self.send_html("<h1>Not Found</h1>", 404)
 
     # ========================================================
@@ -1884,6 +2252,58 @@ class AppHandler(BaseHTTPRequestHandler):
         global CURRENT_TARGET
         global CURRENT_MODE
         global CURRENT_ERROR
+        global CURRENT_AI_EXPLAINER
+        global CURRENT_AI_REPORT
+        global CURRENT_FIX_SCRIPT
+
+        if self.path == "/api/copilot/chat":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                body = self.rfile.read(length) if length > 0 else b""
+                question = ""
+                content_type = self.headers.get("Content-Type", "")
+                if "application/json" in content_type:
+                    try:
+                        data = json.loads(body.decode("utf-8", errors="replace"))
+                        question = data.get("question", "")
+                    except Exception:
+                        pass
+                if not question:
+                    fields = urllib.parse.parse_qs(body.decode("utf-8", errors="replace"))
+                    q_list = fields.get("question", [""])
+                    question = q_list[0].strip() if q_list else ""
+
+                if not question:
+                    raise ValueError("Please provide a question.")
+
+                if CURRENT_RESULT is None:
+                    raise ValueError("No active dataset analysis available. Please run an analysis first.")
+
+                if CURRENT_AI_EXPLAINER is None:
+                    CURRENT_AI_EXPLAINER = AIExplainer()
+
+                reply = CURRENT_AI_EXPLAINER.ask_copilot(question, CURRENT_RESULT, CURRENT_DATA_QUALITY)
+                payload = {
+                    "status": "success",
+                    "question": question,
+                    "reply": reply,
+                    "provider": CURRENT_AI_EXPLAINER.get_active_provider_name()
+                }
+                payload_bytes = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(payload_bytes)))
+                self.end_headers()
+                self.wfile.write(payload_bytes)
+                return
+            except Exception as exc:
+                err_payload = json.dumps({"status": "error", "reply": f"Copilot Error: {str(exc)}"}).encode("utf-8")
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(err_payload)))
+                self.end_headers()
+                self.wfile.write(err_payload)
+                return
 
         if self.path == "/upload":
             try:
@@ -1979,6 +2399,8 @@ class AppHandler(BaseHTTPRequestHandler):
                     analysis_type=mode
                 )
                 CURRENT_DATA_QUALITY = CURRENT_RESULT.get("data_quality", analyze_data_quality(CURRENT_DATAFRAME))
+                CURRENT_AI_REPORT = None
+                CURRENT_FIX_SCRIPT = None
                 CURRENT_ERROR = None
 
                 self.send_response(302)
