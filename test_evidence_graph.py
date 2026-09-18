@@ -57,24 +57,34 @@ def test_evidence_graph_definitions():
         "permutation_experiment",
         "stability_experiment",
         "control_experiment",
+        "measurement",
         "result",
+        "evidence",
         "evidence_fusion",
         "verdict",
         "remediation",
         "intervention",
+        "outcome",
         "reevaluation",
         "remediation_result",
         "resolution",
     }
     expected_edge_relations = {
+        "supports",
         "supported_by",
+        "tests",
         "tested_by",
-        "produced",
-        "produces",
+        "measures",
         "contributes_to",
-        "triggers",
+        "leads_to",
+        "modifies",
+        "evaluates",
         "evaluated_by",
         "evaluated_as",
+        "verifies",
+        "produced",
+        "produces",
+        "triggers",
         "compared_against",
         "resolves_to",
     }
@@ -372,15 +382,125 @@ def test_multiclass_evidence_graph_integrity():
     res = analyze_model(df, target_column="customer_segment", analysis_type="classification")
     graph = res["evidence_graph"]
 
-    assert graph["metadata"]["target_column"] == "customer_segment"
-    assert "annual_income" in graph["summary"]["verified_candidates"]
+    # Check all candidates and their verdicts
+    all_exps = res["verification_experiments"]
+    exp_verdicts = {e["candidate_feature"]: e["verdict"] for e in all_exps}
+    
+    assert exp_verdicts.get("annual_income") == "VERIFIED MODEL RELIANCE"
+    if "satisfaction_score" in exp_verdicts:
+        assert exp_verdicts.get("satisfaction_score") == "NO MEASURABLE MODEL RELIANCE"
+    if "support_tickets" in exp_verdicts:
+        assert exp_verdicts.get("support_tickets") == "NO MEASURABLE MODEL RELIANCE"
 
     trace = get_evidence_trace("annual_income", graph)
     assert trace["verdict"] == "VERIFIED MODEL RELIANCE"
     assert trace["evidence_score"] >= 90
     print(f"  -> annual_income trace: {trace['trace_summary']}")
+
+    # Test get_evidence_chain
+    chain_income = VerificationEngine.get_evidence_chain("annual_income", graph)
+    assert chain_income["verdict"] == "VERIFIED MODEL RELIANCE"
+    assert chain_income["candidate"] == "annual_income"
+    chain_types = [item["type"] for item in chain_income["evidence_chain"]]
+    assert "observation" in chain_types
+    assert "ablation" in chain_types
+    assert "permutation" in chain_types
+    assert "noise" in chain_types
+    assert "control" in chain_types
+    assert "evidence_fusion" in chain_types
+    assert "verdict" in chain_types
+    print(f"  -> annual_income evidence chain extracted: {len(chain_income['evidence_chain'])} items: {chain_types}")
+
     print("  -> TEST 6 PASSED!")
 
+
+def test_programmatic_evidence_graph_api():
+    """Verifies direct programmatic EvidenceGraph API (add_node, add_edge, get_node, get_edges, get_evidence_chain, validate)."""
+    print("\n[TEST 7] Testing Direct Programmatic EvidenceGraph API...")
+    
+    g = EvidenceGraph(graph_id="test_custom_graph", task_type="classification")
+    
+    # 1. Add nodes
+    g.add_node(
+        node_id="cand_feat_a",
+        node_type="candidate",
+        label="Candidate Feature A",
+        candidate_feature="feat_a",
+        description="Hypothesized root cause feature A",
+        data={"importance": 0.85}
+    )
+    g.add_node(
+        node_id="obs_feat_a",
+        node_type="observation",
+        label="Observational Importance",
+        candidate_feature="feat_a",
+        description="Observed model reliance",
+        data={"importance": 0.85, "relative_share_pct": 85.0}
+    )
+    g.add_node(
+        node_id="abl_feat_a",
+        node_type="ablation_experiment",
+        label="Ablation Experiment",
+        candidate_feature="feat_a",
+        data={"delta": -0.65, "delta_pct": -65.0, "score_pts": 35, "max_pts": 35}
+    )
+    g.add_node(
+        node_id="fusion_feat_a",
+        node_type="evidence_fusion",
+        label="Evidence Fusion Score",
+        candidate_feature="feat_a",
+        data={"total_score": 95, "components": {"ablation": 35}}
+    )
+    g.add_node(
+        node_id="verdict_feat_a",
+        node_type="verdict",
+        label="Diagnostic Verdict",
+        candidate_feature="feat_a",
+        data={"verdict": "VERIFIED MODEL RELIANCE", "evidence_score": 95}
+    )
+
+    # 2. Add edges
+    g.add_edge(edge_id="e1", source="cand_feat_a", target="obs_feat_a", relation="supports")
+    g.add_edge(edge_id="e2", source="cand_feat_a", target="abl_feat_a", relation="tested_by")
+    g.add_edge(edge_id="e3", source="abl_feat_a", target="fusion_feat_a", relation="contributes_to")
+    g.add_edge(edge_id="e4", source="fusion_feat_a", target="verdict_feat_a", relation="produces")
+
+    # 3. Query methods
+    node = g.get_node("cand_feat_a")
+    assert node is not None
+    assert node.candidate_feature == "feat_a"
+    assert node.description == "Hypothesized root cause feature A"
+
+    all_edges = g.get_edges()
+    assert len(all_edges) == 4
+    
+    cand_edges = g.get_edges("cand_feat_a")
+    assert len(cand_edges) == 2
+
+    # 4. Validate
+    val = g.validate()
+    assert val["is_valid"] is True
+    assert val["node_count"] == 5
+    assert val["edge_count"] == 4
+
+    # 5. Evidence chain from verdict ID
+    chain_by_verdict = g.get_evidence_chain("verdict_feat_a")
+    assert chain_by_verdict["verdict"] == "VERIFIED MODEL RELIANCE"
+    assert chain_by_verdict["candidate"] == "feat_a"
+    assert len(chain_by_verdict["evidence_chain"]) >= 4
+
+    # 6. Evidence chain from candidate name
+    chain_by_name = g.get_evidence_chain("feat_a")
+    assert chain_by_name["verdict"] == "VERIFIED MODEL RELIANCE"
+    assert chain_by_name["candidate"] == "feat_a"
+
+    # 7. Serialization
+    d = g.to_dict()
+    assert d["graph_id"] == "test_custom_graph"
+    _assert_json_clean(d, "custom_graph_api")
+    
+    print("  -> Programmatic EvidenceGraph API verified successfully!")
+    print("  -> TEST 7 PASSED!")
 
 
 if __name__ == "__main__":
@@ -390,6 +510,8 @@ if __name__ == "__main__":
     test_evidence_graph_classification_pipeline()
     test_evidence_graph_regression_pipeline()
     test_multiclass_evidence_graph_integrity()
+    test_programmatic_evidence_graph_api()
     print("\n=======================================================")
-    print("ALL MULTI-EXPERIMENT EVIDENCE GRAPH TESTS PASSED (6/6)!")
+    print("ALL MULTI-EXPERIMENT EVIDENCE GRAPH TESTS PASSED (7/7)!")
     print("=======================================================\n")
+

@@ -48,11 +48,14 @@ CANONICAL_NODE_TYPES: Set[str] = {
     "permutation_experiment",
     "stability_experiment",
     "control_experiment",
+    "measurement",
     "result",
+    "evidence",
     "evidence_fusion",
     "verdict",
     "remediation",
     "intervention",
+    "outcome",
     "reevaluation",
     "remediation_result",
     "resolution",
@@ -60,14 +63,21 @@ CANONICAL_NODE_TYPES: Set[str] = {
 
 # Canonical Edge Relations
 CANONICAL_EDGE_RELATIONS: Set[str] = {
+    "supports",
     "supported_by",
+    "tests",
     "tested_by",
-    "produced",
-    "produces",
+    "measures",
     "contributes_to",
-    "triggers",
+    "leads_to",
+    "modifies",
+    "evaluates",
     "evaluated_by",
     "evaluated_as",
+    "verifies",
+    "produced",
+    "produces",
+    "triggers",
     "compared_against",
     "resolves_to",
 }
@@ -81,7 +91,8 @@ class EvidenceGraphNode:
     id: str
     type: str
     label: str
-    candidate_feature: str
+    candidate_feature: str = ""
+    description: str = ""
     data: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -90,6 +101,7 @@ class EvidenceGraphNode:
             "id": str(self.id),
             "type": str(self.type),
             "label": str(self.label),
+            "description": str(self.description or self.label),
             "candidate_feature": str(self.candidate_feature),
             "data": self.data,
             "metadata": self.metadata,
@@ -163,7 +175,8 @@ class EvidenceGraph:
         node_id: str,
         node_type: str,
         label: str,
-        candidate_feature: str,
+        candidate_feature: str = "",
+        description: str = "",
         data: Optional[Dict[str, Any]] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> EvidenceGraphNode:
@@ -173,6 +186,7 @@ class EvidenceGraph:
             type=node_type,
             label=label,
             candidate_feature=candidate_feature,
+            description=description or label,
             data=data or {},
             metadata=metadata or {},
         )
@@ -203,14 +217,20 @@ class EvidenceGraph:
     def get_node(self, node_id: str) -> Optional[EvidenceGraphNode]:
         return self._nodes.get(node_id)
 
-    def get_edge(self, edge_id: str) -> Optional[EvidenceGraphEdge]:
-        return self._edges.get(edge_id)
-
     def all_nodes(self) -> List[Dict[str, Any]]:
         return [node.to_dict() for node in self._nodes.values()]
 
     def all_edges(self) -> List[Dict[str, Any]]:
         return [edge.to_dict() for edge in self._edges.values()]
+
+    def get_edges(self, node_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Return all edges or edges connected to a specific node."""
+        if node_id is None:
+            return self.all_edges()
+        return [
+            e.to_dict() for e in self._edges.values()
+            if e.source == node_id or e.target == node_id
+        ]
 
     def validate(self) -> Dict[str, Any]:
         """Validate structural integrity of the graph."""
@@ -219,6 +239,10 @@ class EvidenceGraph:
     def get_trace(self, candidate_feature: str) -> Dict[str, Any]:
         """Extract isolated empirical lineage for a specific candidate feature."""
         return get_evidence_trace(candidate_feature, self.to_dict())
+
+    def get_evidence_chain(self, identifier: str) -> Dict[str, Any]:
+        """Extract connected evidence path for a candidate feature or verdict ID."""
+        return get_evidence_chain(identifier, self.to_dict())
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert entire graph to a JSON-serializable dictionary."""
@@ -436,6 +460,161 @@ def get_evidence_trace(candidate_feature: str, evidence_graph: Dict[str, Any]) -
         "evidence_score": ev_score,
         "trace_summary": trace_summary,
         "trace_steps": trace_steps,
+    })
+
+
+def get_evidence_chain(identifier: str, evidence_graph: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Extracts an ordered, connected evidence chain from a verdict ID, candidate ID,
+    or candidate feature name by traversing the graph.
+    """
+    if not evidence_graph or not identifier:
+        return {
+            "verdict": "UNKNOWN",
+            "candidate": identifier,
+            "evidence_chain": []
+        }
+
+    all_nodes = evidence_graph.get("nodes", [])
+
+    # 1. Resolve candidate feature
+    candidate_feature = identifier
+    target_node = next((n for n in all_nodes if n.get("id") == identifier), None)
+    if target_node:
+        candidate_feature = target_node.get("candidate_feature") or identifier
+    else:
+        matching_node = next((n for n in all_nodes if n.get("candidate_feature") == identifier), None)
+        if matching_node:
+            candidate_feature = identifier
+
+    cand_nodes = [n for n in all_nodes if n.get("candidate_feature") == candidate_feature]
+    if not cand_nodes:
+        return {
+            "verdict": "UNKNOWN",
+            "candidate": candidate_feature,
+            "evidence_chain": []
+        }
+
+    verdict_node = next((n for n in cand_nodes if n.get("type") == "verdict"), None)
+    fusion_node = next((n for n in cand_nodes if n.get("type") in ("evidence_fusion", "evidence")), None)
+    imp_node = next((n for n in cand_nodes if n.get("type") in ("feature_importance", "observation")), None)
+    abl_node = next((n for n in cand_nodes if n.get("type") in ("ablation_experiment", "ablation")), None)
+    perm_node = next((n for n in cand_nodes if n.get("type") in ("permutation_experiment", "permutation")), None)
+    stab_node = next((n for n in cand_nodes if n.get("type") in ("stability_experiment", "noise", "stability")), None)
+    ctrl_node = next((n for n in cand_nodes if n.get("type") in ("control_experiment", "control")), None)
+    interv_node = next((n for n in cand_nodes if n.get("type") in ("intervention", "remediation")), None)
+    remed_node = next((n for n in cand_nodes if n.get("type") in ("remediation_result", "reevaluation")), None)
+    resol_node = next((n for n in cand_nodes if n.get("type") in ("resolution", "outcome")), None)
+
+    verdict_val = verdict_node["data"].get("verdict", "UNTESTED") if verdict_node else "UNTESTED"
+    ev_score = fusion_node["data"].get("total_score", 0) if fusion_node else 0
+
+    chain: List[Dict[str, Any]] = []
+
+    if imp_node:
+        chain.append({
+            "type": "observation",
+            "label": imp_node.get("label", "Feature importance"),
+            "feature": candidate_feature,
+            "feature_importance": imp_node.get("data", {}).get("importance", 0.0),
+            "relative_share_pct": imp_node.get("data", {}).get("relative_share_pct", 0.0),
+            "influence_tier": imp_node.get("data", {}).get("influence_tier", "Moderate"),
+        })
+
+    if abl_node:
+        chain.append({
+            "type": "ablation",
+            "label": abl_node.get("label", "Retrained feature ablation"),
+            "feature": candidate_feature,
+            "delta": abl_node.get("data", {}).get("delta", 0.0),
+            "relative_change_percent": abl_node.get("data", {}).get("delta_pct", 0.0),
+            "points": abl_node.get("data", {}).get("score_pts", 0),
+            "max_points": abl_node.get("data", {}).get("max_pts", 35),
+        })
+
+    if perm_node:
+        chain.append({
+            "type": "permutation",
+            "label": perm_node.get("label", "Test-time feature permutation"),
+            "feature": candidate_feature,
+            "delta": perm_node.get("data", {}).get("delta", 0.0),
+            "relative_change_percent": perm_node.get("data", {}).get("delta_pct", 0.0),
+            "points": perm_node.get("data", {}).get("score_pts", 0),
+            "max_points": perm_node.get("data", {}).get("max_pts", 35),
+        })
+
+    if stab_node:
+        chain.append({
+            "type": "noise",
+            "label": stab_node.get("label", "Noise / measurement stability"),
+            "feature": candidate_feature,
+            "flip_rate": _safe_float(stab_node.get("data", {}).get("flip_rate_pct", 0.0) / 100.0, 0.0),
+            "flip_rate_pct": stab_node.get("data", {}).get("flip_rate_pct", 0.0),
+            "noise_delta": stab_node.get("data", {}).get("noise_delta", 0.0),
+            "points": stab_node.get("data", {}).get("score_pts", 0),
+            "max_points": stab_node.get("data", {}).get("max_pts", 10),
+        })
+
+    if ctrl_node:
+        chain.append({
+            "type": "control",
+            "label": ctrl_node.get("label", "Control feature experiment"),
+            "feature": candidate_feature,
+            "control_feature": ctrl_node.get("data", {}).get("control_feature", "None"),
+            "delta": ctrl_node.get("data", {}).get("control_delta", 0.0),
+            "points": ctrl_node.get("data", {}).get("score_pts", 0),
+            "max_points": ctrl_node.get("data", {}).get("max_pts", 15),
+        })
+
+    if fusion_node:
+        chain.append({
+            "type": "evidence_fusion",
+            "label": fusion_node.get("label", "Evidence fusion"),
+            "feature": candidate_feature,
+            "score": ev_score,
+            "components": fusion_node.get("data", {}).get("components", {}),
+            "score_decomposition": fusion_node.get("data", {}).get("score_decomposition", {}),
+        })
+
+    if verdict_node:
+        chain.append({
+            "type": "verdict",
+            "label": verdict_node.get("label", "Diagnostic Verdict"),
+            "feature": candidate_feature,
+            "value": verdict_val,
+            "evidence_score": ev_score,
+        })
+
+    if interv_node:
+        chain.append({
+            "type": "intervention",
+            "label": interv_node.get("label", "Closed-loop remediation"),
+            "feature": candidate_feature,
+            "strategy": interv_node.get("data", {}).get("strategy", ""),
+        })
+
+    if remed_node:
+        chain.append({
+            "type": "remediation_result",
+            "label": remed_node.get("label", "Remediation Result"),
+            "feature": candidate_feature,
+            "baseline": remed_node.get("data", {}).get("baseline", {}),
+            "remediated": remed_node.get("data", {}).get("remediated", {}),
+            "deltas": remed_node.get("data", {}).get("deltas", {}),
+        })
+
+    if resol_node:
+        chain.append({
+            "type": "resolution",
+            "label": resol_node.get("label", "Resolution Verdict"),
+            "feature": candidate_feature,
+            "verdict": resol_node.get("data", {}).get("resolution_verdict", ""),
+        })
+
+    return safe_primitive({
+        "verdict": verdict_val,
+        "candidate": candidate_feature,
+        "evidence_chain": chain,
     })
 
 
@@ -859,6 +1038,11 @@ class EvidenceGraphBuilder:
     def get_evidence_trace(cls, candidate_feature: str, evidence_graph: Dict[str, Any]) -> Dict[str, Any]:
         """Convenience trace extraction delegation."""
         return get_evidence_trace(candidate_feature, evidence_graph)
+
+    @classmethod
+    def get_evidence_chain(cls, identifier: str, evidence_graph: Dict[str, Any]) -> Dict[str, Any]:
+        """Convenience evidence chain extraction delegation."""
+        return get_evidence_chain(identifier, evidence_graph)
 
 
 def build_evidence_graph(

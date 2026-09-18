@@ -679,4 +679,15 @@ class VerificationEngine:
             "evidence_graph": evidence_graph,
         })
 
+    @classmethod
+    def get_evidence_trace(cls, candidate_feature: str, evidence_graph: Dict[str, Any]) -> Dict[str, Any]:
+        """Extracts isolated lineage trace for a specific candidate feature."""
+        return EvidenceGraphBuilder.get_evidence_trace(candidate_feature, evidence_graph)
+
+    @classmethod
+    def get_evidence_chain(cls, identifier: str, evidence_graph: Dict[str, Any]) -> Dict[str, Any]:
+        """Extracts connected evidence path for a candidate or verdict ID."""
+        return EvidenceGraphBuilder.get_evidence_chain(identifier, evidence_graph)
+
+
 
