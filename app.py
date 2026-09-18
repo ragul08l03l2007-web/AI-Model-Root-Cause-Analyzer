@@ -14,6 +14,7 @@ import pandas as pd
 from analysis.model_analyzer import analyze_model
 from analysis.data_quality import analyze_data_quality
 from analysis.ai_explainer import AIExplainer
+from analysis.visualization import generate_all_visualizations
 
 
 HOST = "localhost"
@@ -29,6 +30,7 @@ CURRENT_ERROR = None
 CURRENT_AI_EXPLAINER = None
 CURRENT_AI_REPORT = None
 CURRENT_FIX_SCRIPT = None
+CURRENT_VISUALIZATIONS = None
 
 
 # ============================================================
@@ -195,6 +197,7 @@ def reset_state():
     global CURRENT_AI_EXPLAINER
     global CURRENT_AI_REPORT
     global CURRENT_FIX_SCRIPT
+    global CURRENT_VISUALIZATIONS
 
     CURRENT_DATAFRAME = None
     CURRENT_RESULT = None
@@ -206,6 +209,7 @@ def reset_state():
     CURRENT_AI_EXPLAINER = None
     CURRENT_AI_REPORT = None
     CURRENT_FIX_SCRIPT = None
+    CURRENT_VISUALIZATIONS = None
 
 
 # ============================================================
@@ -824,6 +828,67 @@ tr:hover td {
     .header h1 {
         font-size: 24px;
     }
+    .chart-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* Interactive Visual Charts & Tabs */
+.chart-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 12px;
+}
+
+.chart-tab-btn {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.chart-tab-btn:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.chart-tab-btn.active {
+    background: #2563eb;
+    color: white;
+    border-color: #1d4ed8;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+}
+
+.chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+    gap: 20px;
+}
+
+.chart-box {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.03);
+    transition: all 0.2s ease;
+}
+
+.chart-box:hover {
+    box-shadow: 0 4px 18px rgba(15, 23, 42, 0.08);
+}
+
+.chart-container {
+    width: 100%;
+    min-height: 280px;
 }
 """
 
@@ -902,6 +967,25 @@ function copyFixCode() {
         });
     }
 }
+
+function switchChartTab(cat, btnElem) {
+    var buttons = document.querySelectorAll(".chart-tab-btn");
+    buttons.forEach(function(b) { b.classList.remove("active"); });
+    if (btnElem) btnElem.classList.add("active");
+
+    var boxes = document.querySelectorAll(".chart-box");
+    boxes.forEach(function(box) {
+        if (cat === "all" || box.getAttribute("data-category") === cat) {
+            box.style.display = "block";
+            var childChart = box.querySelector(".chart-container");
+            if (childChart && typeof Plotly !== "undefined") {
+                Plotly.Plots.resize(childChart);
+            }
+        } else {
+            box.style.display = "none";
+        }
+    });
+}
 </script>
 """
 
@@ -917,6 +1001,7 @@ def page_start(title="AI Model Root-Cause Analyzer"):
         '<meta http-equiv="Pragma" content="no-cache">\n'
         '<meta http-equiv="Expires" content="0">\n'
         "<title>" + safe(title) + "</title>\n"
+        '<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>\n'
         "<style>\n" + BASE_CSS + "\n</style>\n"
         "</head>\n"
         "<body>\n"
@@ -1817,6 +1902,7 @@ def dashboard_page():
     global CURRENT_AI_EXPLAINER
     global CURRENT_AI_REPORT
     global CURRENT_FIX_SCRIPT
+    global CURRENT_VISUALIZATIONS
 
     if CURRENT_AI_EXPLAINER is None:
         CURRENT_AI_EXPLAINER = AIExplainer()
@@ -1825,6 +1911,93 @@ def dashboard_page():
         CURRENT_AI_REPORT = CURRENT_AI_EXPLAINER.explain(result, quality)
     if CURRENT_FIX_SCRIPT is None:
         CURRENT_FIX_SCRIPT = CURRENT_AI_EXPLAINER.generate_fix_script(result, quality)
+    if CURRENT_VISUALIZATIONS is None:
+        CURRENT_VISUALIZATIONS = generate_all_visualizations(result)
+
+    vis = CURRENT_VISUALIZATIONS
+
+    # Build interactive chart boxes
+    chart_boxes = []
+    if "risk_gauge" in vis:
+        chart_boxes.append('<div class="chart-box" data-category="risk"><div id="chart-risk-gauge" class="chart-container"></div></div>')
+    if "risk_breakdown" in vis:
+        chart_boxes.append('<div class="chart-box" data-category="risk"><div id="chart-risk-breakdown" class="chart-container"></div></div>')
+    if "performance_metrics" in vis:
+        chart_boxes.append('<div class="chart-box" data-category="perf"><div id="chart-perf-metrics" class="chart-container"></div></div>')
+    if "cv_stability" in vis:
+        chart_boxes.append('<div class="chart-box" data-category="perf"><div id="chart-cv-stability" class="chart-container"></div></div>')
+    if "feature_importance" in vis:
+        chart_boxes.append('<div class="chart-box" data-category="feats"><div id="chart-feat-importance" class="chart-container"></div></div>')
+    if "feature_relationships" in vis:
+        chart_boxes.append('<div class="chart-box" data-category="feats"><div id="chart-feat-relationships" class="chart-container"></div></div>')
+    if "data_quality_missing" in vis:
+        chart_boxes.append('<div class="chart-box" data-category="quality"><div id="chart-missing-vals" class="chart-container"></div></div>')
+    if "target_distribution" in vis:
+        chart_boxes.append('<div class="chart-box" data-category="quality"><div id="chart-target-dist" class="chart-container"></div></div>')
+    if "confusion_matrix" in vis:
+        chart_boxes.append('<div class="chart-box" data-category="errors"><div id="chart-confusion-matrix" class="chart-container"></div></div>')
+    if "actual_vs_predicted" in vis:
+        chart_boxes.append('<div class="chart-box" data-category="errors"><div id="chart-actual-vs-pred" class="chart-container"></div></div>')
+    if "residual_plot" in vis:
+        chart_boxes.append('<div class="chart-box" data-category="errors"><div id="chart-residual-plot" class="chart-container"></div></div>')
+    if "residual_distribution" in vis:
+        chart_boxes.append('<div class="chart-box" data-category="errors"><div id="chart-residual-dist" class="chart-container"></div></div>')
+
+    chart_payload_map = {
+        "chart-risk-gauge": vis.get("risk_gauge"),
+        "chart-risk-breakdown": vis.get("risk_breakdown"),
+        "chart-perf-metrics": vis.get("performance_metrics"),
+        "chart-cv-stability": vis.get("cv_stability"),
+        "chart-feat-importance": vis.get("feature_importance"),
+        "chart-feat-relationships": vis.get("feature_relationships"),
+        "chart-missing-vals": vis.get("data_quality_missing"),
+        "chart-target-dist": vis.get("target_distribution"),
+        "chart-confusion-matrix": vis.get("confusion_matrix"),
+        "chart-actual-vs-pred": vis.get("actual_vs_predicted"),
+        "chart-residual-plot": vis.get("residual_plot"),
+        "chart-residual-dist": vis.get("residual_distribution"),
+    }
+    clean_map = {k: v for k, v in chart_payload_map.items() if v is not None}
+    chart_json = json.dumps(clean_map).replace("</script>", "<\\/script>")
+
+    visual_center_html = (
+        '<div class="section-title">📊 Evidence-Driven Visual Diagnostic Center</div>\n'
+        '<div class="card" style="padding:16px 20px 24px; margin-bottom:24px;">\n'
+        '<div class="chart-tabs">\n'
+        '<button class="chart-tab-btn active" type="button" onclick="switchChartTab(\'all\', this)">All Charts</button>\n'
+        '<button class="chart-tab-btn" type="button" onclick="switchChartTab(\'risk\', this)">Risk &amp; Health</button>\n'
+        '<button class="chart-tab-btn" type="button" onclick="switchChartTab(\'perf\', this)">Performance &amp; CV</button>\n'
+        '<button class="chart-tab-btn" type="button" onclick="switchChartTab(\'feats\', this)">Feature Impact</button>\n'
+        '<button class="chart-tab-btn" type="button" onclick="switchChartTab(\'quality\', this)">Data Quality</button>\n'
+        '<button class="chart-tab-btn" type="button" onclick="switchChartTab(\'errors\', this)">Error &amp; Diagnostics</button>\n'
+        '</div>\n'
+        '<div class="chart-grid">\n'
+        + "".join(chart_boxes) + "\n"
+        + '</div>\n'
+        + '</div>\n'
+        + f'<script>\nvar DIAGNOSTIC_CHARTS = {chart_json};\n'
+        + """
+document.addEventListener("DOMContentLoaded", function() {
+    if (typeof Plotly !== "undefined" && typeof DIAGNOSTIC_CHARTS !== "undefined") {
+        for (var elemId in DIAGNOSTIC_CHARTS) {
+            var el = document.getElementById(elemId);
+            if (el && DIAGNOSTIC_CHARTS[elemId]) {
+                var c = DIAGNOSTIC_CHARTS[elemId];
+                Plotly.newPlot(elemId, c.data || [], c.layout || {}, c.config || {responsive: true});
+            }
+        }
+    }
+});
+window.addEventListener("resize", function() {
+    var chartContainers = document.querySelectorAll(".chart-container");
+    chartContainers.forEach(function(el) {
+        if (typeof Plotly !== "undefined") {
+            Plotly.Plots.resize(el);
+        }
+    });
+});
+</script>\n"""
+    )
 
     ai_provider_name = CURRENT_AI_REPORT.get("provider", CURRENT_AI_EXPLAINER.get_active_provider_name())
     ai_summary = CURRENT_AI_REPORT.get("executive_summary", "")
@@ -1900,6 +2073,7 @@ def dashboard_page():
         + f'<div class="success">Analyzed <strong>{safe(CURRENT_FILENAME)}</strong> using target <strong>{safe(CURRENT_TARGET)}</strong> with <strong>{safe(mode_label(task_type))}</strong> analysis.<br>'
         + f'<span style="font-size:13px; font-weight:normal; color:#14532d;">{safe(task_reason)}</span></div>\n'
         + ai_executive_html
+        + visual_center_html
         + model_selection_card_html
         + performance_html
         + model_comp_html
