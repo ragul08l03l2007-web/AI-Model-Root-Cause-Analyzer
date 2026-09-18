@@ -1998,7 +1998,8 @@ def dashboard_page():
     # Build interactive chart boxes
     chart_boxes = []
     if "evidence_graph" in vis:
-        chart_boxes.append('<div class="chart-box" data-category="verif" style="grid-column: 1 / -1;"><div id="chart-evidence-graph" class="chart-container" style="min-height:420px;"></div></div>')
+        ev_h = vis.get("evidence_graph", {}).get("layout", {}).get("height", 480)
+        chart_boxes.append(f'<div class="chart-box" data-category="verif" style="grid-column: 1 / -1;"><div id="chart-evidence-graph" class="chart-container" style="min-height:{ev_h}px; width:100%;"></div></div>')
     if "verification_ablation" in vis:
         chart_boxes.append('<div class="chart-box" data-category="verif"><div id="chart-verif-ablation" class="chart-container"></div></div>')
     if "remediation_simulation" in vis:

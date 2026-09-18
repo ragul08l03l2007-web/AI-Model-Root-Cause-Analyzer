@@ -1008,9 +1008,14 @@ def generate_all_visualizations(result: Dict[str, Any]) -> Dict[str, Any]:
 
 def build_evidence_graph_spec(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
-    Builds an interactive Plotly Sankey / Directed Graph specification for the
-    Multi-Experiment Evidence Graph, tracing candidate features through counterfactual
-    experiments, evidence fusion, verdicts, and closed-loop remediation.
+    Builds an interactive Plotly Sankey specification for the Multi-Experiment Evidence Graph.
+    Features:
+      1. Clear 6-column hierarchical layout from left-to-right (Candidates -> Experiments -> Fusion -> Verdict -> Intervention -> Resolution).
+      2. Vertical band partitioning: each candidate occupies its own distinct vertical branch.
+      3. Non-overlapping, concise visual labels with rich detailed tooltips in hover/customdata.
+      4. Highlighted verified path with distinct emerald/royal blue styling.
+      5. Complete visibility for all candidates (including rejected, zero-score, and untested branches).
+      6. Responsive dynamic height based on the number of candidates.
     """
     graph = result.get("evidence_graph") or result.get("verification_engine", {}).get("evidence_graph", {})
     if not graph or not graph.get("nodes"):
@@ -1022,53 +1027,317 @@ def build_evidence_graph_spec(result: Dict[str, Any]) -> Optional[Dict[str, Any]
     if not nodes:
         return None
 
+    # Identify verified candidates and candidate features in order
+    summary = graph.get("summary", {})
+    verified_cands_list = summary.get("verified_candidates", [])
+    verified_cands_set = set(verified_cands_list)
+
+    candidates_ordered: List[str] = []
+    seen_cands: Set[str] = set()
+
+    for vc in verified_cands_list:
+        if vc and vc not in seen_cands:
+            candidates_ordered.append(vc)
+            seen_cands.add(vc)
+
+    for n in nodes:
+        cf = n.get("candidate_feature")
+        if cf and cf not in seen_cands:
+            candidates_ordered.append(cf)
+            seen_cands.add(cf)
+
+    if not candidates_ordered:
+        candidates_ordered = ["primary_candidate"]
+
+    num_candidates = len(candidates_ordered)
+    cand_to_idx = {c: i for i, c in enumerate(candidates_ordered)}
+
+    # Experiment node types
+    EXPERIMENT_TYPES = {
+        "ablation_experiment", "ablation",
+        "permutation_experiment", "permutation",
+        "stability_experiment", "stability", "noise",
+        "control_experiment", "control",
+        "experiment", "measurement", "result", "evidence"
+    }
+
+    # Group experiment nodes per candidate to distribute them vertically in their band
+    cand_exp_nodes: Dict[str, List[Dict[str, Any]]] = {c: [] for c in candidates_ordered}
+    for n in nodes:
+        cf = n.get("candidate_feature", "")
+        ntype = n.get("type", "")
+        if cf in cand_exp_nodes and ntype in EXPERIMENT_TYPES:
+            cand_exp_nodes[cf].append(n)
+
+    # Column horizontal X coordinates (normalized 0.0 to 1.0)
+    col_x_map = {
+        "candidate": 0.01,
+        "feature_importance": 0.12,
+        "observation": 0.12,
+        "ablation_experiment": 0.26,
+        "permutation_experiment": 0.26,
+        "stability_experiment": 0.26,
+        "control_experiment": 0.26,
+        "experiment": 0.26,
+        "measurement": 0.26,
+        "result": 0.26,
+        "evidence": 0.26,
+        "evidence_fusion": 0.46,
+        "verdict": 0.64,
+        "intervention": 0.78,
+        "remediation": 0.78,
+        "remediation_result": 0.88,
+        "reevaluation": 0.88,
+        "resolution": 0.98,
+        "outcome": 0.98,
+    }
+
     # Map node id to index in nodes array
     node_id_to_idx = {n["id"]: i for i, n in enumerate(nodes)}
 
-    # Color palette for node types
-    type_colors = {
-        "candidate": "#3b82f6",              # Blue
-        "feature_importance": "#6366f1",     # Indigo
-        "ablation_experiment": "#8b5cf6",    # Purple
-        "permutation_experiment": "#a855f7", # Fuchsia
-        "stability_experiment": "#0ea5e9",   # Sky
-        "control_experiment": "#14b8a6",     # Teal
-        "evidence_fusion": "#f59e0b",        # Amber
-        "verdict": "#10b981",                # Emerald Green (customized below if rejected)
-        "intervention": "#0284c7",           # Cyan
-        "remediation_result": "#2563eb",     # Royal Blue
-        "resolution": "#059669",             # Dark Emerald
-    }
+    node_labels: List[str] = []
+    node_colors: List[str] = []
+    custom_data: List[str] = []
+    node_x: List[float] = []
+    node_y: List[float] = []
 
-    node_labels = []
-    node_colors = []
-    custom_data = []
+    # Calculate vertical bands for each candidate
+    # Total usable Y range is [0.04, 0.96] = 0.92 span
+    y_min = 0.04
+    y_span = 0.92
+    band_h = y_span / max(1, num_candidates)
 
     for n in nodes:
+        nid = n.get("id", "")
         ntype = n.get("type", "candidate")
-        label = n.get("label", n.get("id"))
-        base_color = type_colors.get(ntype, "#64748b")
+        cf = n.get("candidate_feature", "")
+        ndata = n.get("data", {})
+        is_verified_cand = (cf in verified_cands_set)
 
-        # Specific verdict / status color tweaks
-        if ntype == "verdict":
-            v_status = n.get("data", {}).get("status", "")
-            if v_status == "REJECTED" or "NO MEASURABLE" in n.get("data", {}).get("verdict", ""):
-                base_color = "#94a3b8"  # Slate Gray
-            elif v_status == "UNTESTED" or "NOT TESTED" in n.get("data", {}).get("verdict", ""):
+        # 1. Determine X position
+        x_pos = col_x_map.get(ntype, 0.50)
+
+        # 2. Determine Y position based on candidate's vertical band
+        c_idx = cand_to_idx.get(cf, 0)
+        band_top = y_min + c_idx * band_h
+        band_mid = band_top + 0.5 * band_h
+
+        if ntype in EXPERIMENT_TYPES:
+            exp_list = cand_exp_nodes.get(cf, [])
+            if len(exp_list) > 1:
+                # Find index of this experiment in candidate's experiment list
+                exp_idx = 0
+                for idx_e, en in enumerate(exp_list):
+                    if en.get("id") == nid:
+                        exp_idx = idx_e
+                        break
+                # Distribute evenly within candidate's band
+                y_pos = band_top + (exp_idx + 0.5) / len(exp_list) * band_h
+            else:
+                y_pos = band_mid
+        else:
+            y_pos = band_mid
+
+        node_x.append(round(x_pos, 4))
+        node_y.append(round(y_pos, 4))
+
+        # 3. Format Concise Visual Label & Rich Tooltip Customdata
+        if ntype == "candidate":
+            label = f"<b>{cf}</b><br><span style='font-size:10px;'>Candidate Feature</span>"
+            base_color = "#059669" if is_verified_cand else "#64748b"
+            tooltip = (
+                f"<b>Candidate Root-Cause Hypothesis: {cf}</b><br>"
+                f"Feature: <code>{cf}</code><br>"
+                f"Status: {'VERIFIED PRIMARY DRIVER' if is_verified_cand else 'Evaluated Candidate'}"
+            )
+
+        elif ntype in ("feature_importance", "observation"):
+            share_pct = _safe_float(ndata.get("relative_share_pct", 0.0))
+            imp_val = _safe_float(ndata.get("importance", 0.0))
+            tier = ndata.get("influence_tier", "Moderate")
+            label = f"<b>Importance</b><br>{cf}<br>{share_pct:.1f}% share"
+            base_color = "#4f46e5" if is_verified_cand else "#64748b"
+            tooltip = (
+                f"<b>Observational Feature Importance</b><br>"
+                f"Feature: <code>{cf}</code><br>"
+                f"Importance Score: {imp_val:.4f}<br>"
+                f"Relative Share: {share_pct:.1f}%<br>"
+                f"Influence Tier: {tier}"
+            )
+
+        elif ntype in ("ablation_experiment", "ablation"):
+            delta = _safe_float(ndata.get("delta", 0.0))
+            delta_pct = _safe_float(ndata.get("delta_pct", 0.0))
+            pts = ndata.get("score_pts", 0)
+            max_pts = ndata.get("max_pts", 35)
+            rating = ndata.get("effect_strength", "evaluated")
+            label = f"<b>Ablation</b><br>{cf}<br>Δ {delta:+.3f}"
+            base_color = "#7c3aed" if is_verified_cand else "#94a3b8"
+            tooltip = (
+                f"<b>Retrained Feature Ablation Experiment</b><br>"
+                f"Candidate: <code>{cf}</code><br>"
+                f"Baseline Metric: {_safe_float(ndata.get('baseline_metric', 0.0)):.4f}<br>"
+                f"Ablated Metric: {_safe_float(ndata.get('ablated_metric', 0.0)):.4f}<br>"
+                f"<b>Performance Delta: {delta:+.4f} ({delta_pct:+.1f}%)</b><br>"
+                f"Evidence Points: {pts} / {max_pts} pts<br>"
+                f"Rating: {rating}"
+            )
+
+        elif ntype in ("permutation_experiment", "permutation"):
+            delta = _safe_float(ndata.get("delta", 0.0))
+            delta_pct = _safe_float(ndata.get("delta_pct", 0.0))
+            pts = ndata.get("score_pts", 0)
+            max_pts = ndata.get("max_pts", 35)
+            rating = ndata.get("effect_strength", "evaluated")
+            label = f"<b>Permutation</b><br>{cf}<br>Δ {delta:+.3f}"
+            base_color = "#9333ea" if is_verified_cand else "#94a3b8"
+            tooltip = (
+                f"<b>Test-Time Permutation Shuffling Experiment</b><br>"
+                f"Candidate: <code>{cf}</code><br>"
+                f"Baseline Metric: {_safe_float(ndata.get('baseline_metric', 0.0)):.4f}<br>"
+                f"Permuted Metric: {_safe_float(ndata.get('permuted_metric', 0.0)):.4f}<br>"
+                f"<b>Performance Delta: {delta:+.4f} ({delta_pct:+.1f}%)</b><br>"
+                f"Evidence Points: {pts} / {max_pts} pts<br>"
+                f"Rating: {rating}"
+            )
+
+        elif ntype in ("stability_experiment", "stability", "noise"):
+            flip_pct = _safe_float(ndata.get("flip_rate_pct", 0.0))
+            noise_delta = _safe_float(ndata.get("noise_delta", 0.0))
+            pts = ndata.get("score_pts", 0)
+            max_pts = ndata.get("max_pts", 10)
+            sens = ndata.get("noise_sensitivity", "robust")
+            label = f"<b>Stability</b><br>{cf}<br>{flip_pct:.1f}% flips"
+            base_color = "#0284c7" if is_verified_cand else "#94a3b8"
+            tooltip = (
+                f"<b>Measurement Stability (10% σ Noise Jitter)</b><br>"
+                f"Candidate: <code>{cf}</code><br>"
+                f"Baseline Metric: {_safe_float(ndata.get('baseline_metric', 0.0)):.4f}<br>"
+                f"Perturbed Metric: {_safe_float(ndata.get('perturbed_metric', 0.0)):.4f}<br>"
+                f"<b>Prediction Flip Rate: {flip_pct:.1f}%</b><br>"
+                f"Metric Noise Delta: {noise_delta:+.4f}<br>"
+                f"Evidence Points: {pts} / {max_pts} pts<br>"
+                f"Sensitivity: {sens}"
+            )
+
+        elif ntype in ("control_experiment", "control"):
+            ctrl_feat = ndata.get("control_feature", "Control")
+            ctrl_delta = _safe_float(ndata.get("control_delta", 0.0))
+            pts = ndata.get("score_pts", 0)
+            max_pts = ndata.get("max_pts", 15)
+            ctrl_rating = ndata.get("status", "evaluated")
+            label = f"<b>Control ({ctrl_feat})</b><br>Δ {ctrl_delta:+.3f}"
+            base_color = "#0d9488" if is_verified_cand else "#94a3b8"
+            tooltip = (
+                f"<b>Control Specificity Benchmark</b><br>"
+                f"Target Candidate: <code>{cf}</code><br>"
+                f"Control Feature: <code>{ctrl_feat}</code><br>"
+                f"Control Ablated Metric: {_safe_float(ndata.get('control_ablation_metric', 0.0)):.4f}<br>"
+                f"<b>Control Delta: {ctrl_delta:+.4f}</b><br>"
+                f"Evidence Points: {pts} / {max_pts} pts<br>"
+                f"Specificity Rating: {ctrl_rating}"
+            )
+
+        elif ntype == "evidence_fusion":
+            ev_score = ndata.get("total_score", 0)
+            decomp = ndata.get("score_decomposition", {})
+            abl_pts = decomp.get("ablation_points", 0)
+            perm_pts = decomp.get("permutation_points", 0)
+            ctrl_pts = decomp.get("control_points", 0)
+            stab_pts = decomp.get("stability_points", 0)
+            const_pts = decomp.get("consistency_points", 0)
+
+            label = f"<b>Evidence Fusion</b><br>{ev_score} / 100"
+            base_color = "#10b981" if is_verified_cand else "#cbd5e1"
+            tooltip = (
+                f"<b>Multi-Experiment Evidence Fusion: {cf}</b><br>"
+                f"<b>Total Evidence Score: {ev_score} / 100</b><br><br>"
+                f"<b>5-Component Point Decomposition:</b><br>"
+                f"• Retrained Ablation: {abl_pts}/35 pts<br>"
+                f"• Permutation Shuffling: {perm_pts}/35 pts<br>"
+                f"• Control Specificity: {ctrl_pts}/15 pts<br>"
+                f"• Measurement Stability: {stab_pts}/10 pts<br>"
+                f"• Observational Consistency: {const_pts}/5 pts"
+            )
+
+        elif ntype == "verdict":
+            verdict = ndata.get("verdict", "EVALUATED")
+            ev_score = ndata.get("evidence_score", 0)
+            summary_txt = ndata.get("summary", "")
+            v_status = ndata.get("status", "")
+
+            if "VERIFIED" in verdict:
+                label = f"<b>VERIFIED MODEL</b><br><b>RELIANCE</b><br><span style='font-size:10px;'>Score: {ev_score}/100</span>"
+                base_color = "#047857"
+            elif "NO MEASURABLE" in verdict:
+                label = f"<b>NO MEASURABLE</b><br><b>RELIANCE</b><br><span style='font-size:10px;'>Score: {ev_score}/100</span>"
+                base_color = "#94a3b8"
+            elif "NOT TESTED" in verdict:
+                label = "<b>NOT TESTED</b><br><span style='font-size:10px;'>Untested</span>"
                 base_color = "#cbd5e1"
-            elif "BRITTLENESS" in n.get("data", {}).get("verdict", ""):
-                base_color = "#ef4444"  # Red
+            else:
+                label = f"<b>{verdict}</b><br><span style='font-size:10px;'>Score: {ev_score}/100</span>"
+                base_color = "#f59e0b"
+
+            tooltip = (
+                f"<b>Diagnostic Verdict: {verdict}</b><br>"
+                f"Candidate: <code>{cf}</code><br>"
+                f"Evidence Score: {ev_score} / 100<br>"
+                f"Status: {v_status}<br><br>"
+                f"<b>Conclusion:</b><br>{summary_txt}"
+            )
+
+        elif ntype in ("intervention", "remediation"):
+            strategy = ndata.get("strategy", "Preprocessing & Regularization")
+            label = "<b>Intervention</b><br>Regularization &<br>Balancing"
+            base_color = "#2563eb"
+            tooltip = (
+                f"<b>Closed-Loop Remediation Intervention</b><br>"
+                f"Target Feature: <code>{cf}</code><br>"
+                f"Strategy: {strategy}<br>"
+                f"Action: Data preprocessing, class rebalancing & regularized retrain"
+            )
+
+        elif ntype in ("remediation_result", "reevaluation"):
+            deltas = ndata.get("deltas", {})
+            d_test = _safe_float(deltas.get("test_score_delta", 0.0))
+            d_gap = _safe_float(deltas.get("generalization_gap_reduction", 0.0))
+            b_test = _safe_float(ndata.get("baseline", {}).get("test_score", 0.0))
+            r_test = _safe_float(ndata.get("remediated", {}).get("test_score", 0.0))
+            label = f"<b>Re-evaluation</b><br>Held-out Δ: {d_test:+.3f}<br>Gap Δ: {d_gap:+.3f}"
+            base_color = "#4338ca"
+            tooltip = (
+                f"<b>Post-Remediation Benchmark</b><br>"
+                f"Baseline Test Score: {b_test:.4f}<br>"
+                f"Remediated Test Score: {r_test:.4f}<br>"
+                f"<b>Held-Out Test Delta: {d_test:+.4f}</b><br>"
+                f"<b>Generalization Gap Reduction: {d_gap:+.4f}</b>"
+            )
+
+        elif ntype in ("resolution", "outcome"):
+            res_verdict = ndata.get("resolution_verdict", "Evaluated")
+            label = f"<b>Resolution</b><br><b>{res_verdict}</b>"
+            base_color = "#065f46"
+            tooltip = (
+                f"<b>Final Closed-Loop Resolution: {res_verdict}</b><br><br>"
+                f"Full evaluation details available in the Remediation Benchmark Matrix."
+            )
+
+        else:
+            label = f"<b>{n.get('label', nid)}</b>"
+            base_color = "#64748b"
+            tooltip = f"<b>{label}</b><br>Type: {ntype}<br>Feature: {cf}"
 
         node_labels.append(label)
         node_colors.append(base_color)
-        custom_data.append(f"Type: {ntype}<br>Feature: {n.get('candidate_feature', 'N/A')}")
+        custom_data.append(tooltip)
 
-    # Build links
-    sources = []
-    targets = []
-    values = []
-    link_labels = []
-    link_colors = []
+    # 4. Build links with distinct highlight colors for the verified path
+    sources: List[int] = []
+    targets: List[int] = []
+    values: List[float] = []
+    link_labels: List[str] = []
+    link_colors: List[str] = []
 
     for e in edges:
         src = e.get("source")
@@ -1076,29 +1345,59 @@ def build_evidence_graph_spec(result: Dict[str, Any]) -> Optional[Dict[str, Any]
         if src in node_id_to_idx and tgt in node_id_to_idx:
             src_idx = node_id_to_idx[src]
             tgt_idx = node_id_to_idx[tgt]
-            weight = max(0.2, _safe_float(e.get("weight", 1.0)))
+            src_node = nodes[src_idx]
+            tgt_node = nodes[tgt_idx]
+
+            src_cf = src_node.get("candidate_feature", "")
+            tgt_cf = tgt_node.get("candidate_feature", "")
+            is_verified_link = (src_cf in verified_cands_set or tgt_cf in verified_cands_set)
+
+            weight = max(0.4, _safe_float(e.get("weight", 1.0)))
             relation = e.get("relation", "links_to")
+
+            # Verified path uses vibrant emerald or royal blue; unverified uses subtle slate
+            if is_verified_link:
+                if relation in ("produces", "triggers", "resolves_to", "evaluates"):
+                    l_color = "rgba(16, 185, 129, 0.65)" if src_node.get("type") in ("verdict", "evidence_fusion") else "rgba(37, 99, 235, 0.65)"
+                else:
+                    l_color = "rgba(16, 185, 129, 0.40)"
+            else:
+                l_color = "rgba(148, 163, 184, 0.22)"
 
             sources.append(src_idx)
             targets.append(tgt_idx)
             values.append(weight)
             link_labels.append(relation)
-            link_colors.append("rgba(148, 163, 184, 0.35)")
+            link_colors.append(l_color)
 
     if not sources or not targets:
         return None
+
+    # Calculate dynamic responsive height based on number of candidates
+    if num_candidates <= 1:
+        chart_height = 460
+    elif num_candidates == 2:
+        chart_height = 560
+    elif num_candidates == 3:
+        chart_height = 680
+    elif num_candidates == 4:
+        chart_height = 800
+    else:
+        chart_height = max(850, min(1600, 220 + num_candidates * 160))
 
     sankey_trace = {
         "type": "sankey",
         "orientation": "h",
         "node": {
-            "pad": 15,
-            "thickness": 18,
-            "line": {"color": "#334155", "width": 0.5},
+            "pad": max(16, min(30, int(220 / max(1, num_candidates)))),
+            "thickness": 22,
+            "line": {"color": "#1e293b", "width": 1},
             "label": node_labels,
             "color": node_colors,
             "customdata": custom_data,
-            "hovertemplate": "<b>%{label}</b><br>%{customdata}<extra></extra>"
+            "x": node_x,
+            "y": node_y,
+            "hovertemplate": "%{customdata}<extra></extra>"
         },
         "link": {
             "source": sources,
@@ -1106,16 +1405,20 @@ def build_evidence_graph_spec(result: Dict[str, Any]) -> Optional[Dict[str, Any]
             "value": values,
             "label": link_labels,
             "color": link_colors,
-            "hovertemplate": "<b>%{source.label}</b> &rarr; <b>%{target.label}</b><br>Relation: %{label}<br>Weight: %{value:.2f}<extra></extra>"
+            "hovertemplate": "<b>%{source.label}</b> &rarr; <b>%{target.label}</b><br>Relation: <i>%{label}</i><br>Evidence Weight: %{value:.2f}<extra></extra>"
         }
     }
 
-    summary = graph.get("summary", {})
-    verified = ", ".join(summary.get("verified_candidates", [])) or "None"
+    verified_str = ", ".join(verified_cands_list) or "None"
     total_nodes = summary.get("total_nodes", len(nodes))
     total_edges = summary.get("total_edges", len(edges))
 
-    layout = _default_layout(f"Multi-Experiment Evidence Graph (Verified: {verified} | {total_nodes} Nodes, {total_edges} Edges)", height=420)
+    layout = _default_layout(
+        f"Multi-Experiment Evidence Graph (Verified: {verified_str} | {total_nodes} Nodes, {total_edges} Edges)",
+        height=chart_height
+    )
+    layout["margin"] = {"l": 20, "r": 20, "t": 60, "b": 30}
+    layout["font"] = {"family": "system-ui, -apple-system, sans-serif", "size": 11, "color": "#0f172a"}
 
     return safe_primitive({
         "data": [sankey_trace],
