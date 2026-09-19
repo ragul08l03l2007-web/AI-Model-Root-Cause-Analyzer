@@ -22,8 +22,8 @@ from analysis.ai_explainer import AIExplainer
 from analysis.visualization import generate_all_visualizations
 from analysis.evidence import safe_primitive
 
-HOST = "localhost"
-PORT = 8000
+HOST = os.environ.get("HOST", "0.0.0.0")
+PORT = int(os.environ.get("PORT", 8000))
 
 # Server session state
 CURRENT_DATAFRAME: Optional[pd.DataFrame] = None
