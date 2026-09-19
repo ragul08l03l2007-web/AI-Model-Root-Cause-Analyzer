@@ -2274,21 +2274,19 @@ function signInWithGoogleSSO() {
     displayName: "Ragul",
     email: "ragul08l03l2007@gmail.com",
     photoURL: null,
-    isOwner: true,
-    role: "Workspace Owner",
     loginTime: new Date().toISOString()
   };
   localStorage.setItem("rca_auth_user", JSON.stringify(currentUser));
   updateAuthUI();
   closeAuthModal();
-  showNotificationToast("🎉 Google Sign-In Successful! Workspace ownership verified for " + currentUser.email);
+  showNotificationToast("🎉 Signed in as " + currentUser.email);
 }
 
 function handleManualGmailSignIn(event) {
   if (event) event.preventDefault();
   const nameInput = document.getElementById("input-auth-name");
   const emailInput = document.getElementById("input-auth-email");
-  const name = nameInput ? nameInput.value.trim() : "Owner";
+  const name = nameInput ? nameInput.value.trim() : "Ragul";
   const email = emailInput ? emailInput.value.trim() : "ragul08l03l2007@gmail.com";
 
   if (!email) {
@@ -2301,15 +2299,13 @@ function handleManualGmailSignIn(event) {
     displayName: name || email.split("@")[0],
     email: email,
     photoURL: null,
-    isOwner: true,
-    role: "Workspace Owner",
     loginTime: new Date().toISOString()
   };
 
   localStorage.setItem("rca_auth_user", JSON.stringify(currentUser));
   updateAuthUI();
   closeAuthModal();
-  showNotificationToast("🎉 Workspace ownership granted to " + currentUser.email);
+  showNotificationToast("🎉 Signed in as " + currentUser.email);
 }
 
 function signOutUser() {

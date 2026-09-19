@@ -1252,17 +1252,9 @@ code, pre {
 }
 
 .user-profile-meta .user-name {
-  font-size: 0.8rem;
-  font-weight: 700;
+  font-size: 0.82rem;
+  font-weight: 600;
   color: var(--text-main);
-}
-
-.user-owner-badge {
-  font-size: 0.62rem;
-  font-weight: 700;
-  color: var(--success);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 .dropdown-arrow {

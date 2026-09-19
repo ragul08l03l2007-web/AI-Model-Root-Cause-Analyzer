@@ -89,10 +89,9 @@
         <!-- Logged In User Profile Pill -->
         <div id="user-profile-menu" class="user-profile-pill" style="display: none;" onclick="toggleUserDropdown()">
           <img id="user-avatar-img" class="user-avatar-img" src="" alt="User Avatar" style="display: none;">
-          <div id="user-avatar-fallback" class="user-avatar-fallback">U</div>
+          <div id="user-avatar-fallback" class="user-avatar-fallback">R</div>
           <div class="user-profile-meta">
-            <span class="user-name" id="user-display-name">Owner</span>
-            <span class="user-owner-badge">Owner</span>
+            <span class="user-name" id="user-display-name">Ragul</span>
           </div>
           <svg class="dropdown-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M6 9l6 6 6-6"/>
@@ -102,26 +101,25 @@
         <!-- User Dropdown Menu -->
         <div id="user-dropdown-card" class="user-dropdown-card" style="display: none;">
           <div class="user-card-header">
-            <div class="user-card-avatar" id="user-card-avatar-initials">U</div>
+            <div class="user-card-avatar" id="user-card-avatar-initials">R</div>
             <div class="user-card-info">
-              <div class="user-card-name" id="user-card-full-name">Google User</div>
-              <div class="user-card-email" id="user-card-email-text">user@gmail.com</div>
-              <span class="badge badge-success" style="font-size: 0.65rem; padding: 2px 6px; margin-top: 4px;">Verified Workspace Owner</span>
+              <div class="user-card-name" id="user-card-full-name">Ragul</div>
+              <div class="user-card-email" id="user-card-email-text">ragul08l03l2007@gmail.com</div>
             </div>
           </div>
           <div class="user-card-divider"></div>
           <div class="user-card-details">
             <div class="user-detail-row">
-              <span class="detail-label">Project Domain:</span>
+              <span class="detail-label">Project:</span>
               <span class="detail-val">Root-Cause Analyzer</span>
             </div>
             <div class="user-detail-row">
-              <span class="detail-label">Cloud Sync:</span>
+              <span class="detail-label">Cloud Status:</span>
               <span class="detail-val" style="color: var(--success);">● Active &amp; Ready</span>
             </div>
             <div class="user-detail-row">
               <span class="detail-label">Session ID:</span>
-              <span class="detail-val" id="user-session-id" style="font-family: var(--font-mono); font-size: 0.7rem;">sess_auth_active</span>
+              <span class="detail-val" id="user-session-id" style="font-family: var(--font-mono); font-size: 0.7rem;">sess_active</span>
             </div>
           </div>
           <div class="user-card-divider"></div>
@@ -1274,8 +1272,8 @@
             </svg>
           </div>
           <div>
-            <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700;">Google Account &amp; Workspace Ownership</h3>
-            <span style="font-size: 0.76rem; color: var(--text-muted);">Secure Gmail authentication and dataset ownership</span>
+            <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700;">Google Account &amp; Profile</h3>
+            <span style="font-size: 0.76rem; color: var(--text-muted);">Sign in with Google to sync sessions and diagnostics</span>
           </div>
         </div>
         <button class="btn-icon" onclick="closeAuthModal()" style="background:none; border:none; font-size: 1.2rem; cursor: pointer; color: var(--text-muted);">✕</button>
@@ -1285,11 +1283,10 @@
         <!-- Status Card if Signed In -->
         <div id="auth-status-logged-in" style="display: none; background: var(--bg-surface-elevated); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px; margin-bottom: 20px;">
           <div style="display: flex; align-items: center; gap: 14px;">
-            <div id="modal-user-avatar-badge" style="width: 44px; height: 44px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.2rem;">U</div>
+            <div id="modal-user-avatar-badge" style="width: 44px; height: 44px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.2rem;">R</div>
             <div style="flex: 1;">
-              <div id="modal-user-name" style="font-weight: 700; font-size: 1rem;">Owner</div>
-              <div id="modal-user-email" style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">user@gmail.com</div>
-              <span class="badge badge-success" style="margin-top: 4px; display: inline-block;">● Active Workspace Owner</span>
+              <div id="modal-user-name" style="font-weight: 700; font-size: 1rem;">Ragul</div>
+              <div id="modal-user-email" style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">ragul08l03l2007@gmail.com</div>
             </div>
             <button class="btn btn-outline btn-sm" onclick="signOutUser()">Sign Out</button>
           </div>
@@ -1326,15 +1323,15 @@
             <input type="email" id="input-auth-email" class="form-input" placeholder="e.g., ragul08l03l2007@gmail.com" value="ragul08l03l2007@gmail.com" required>
           </div>
           <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 10px; margin-top: 4px;">
-            <span>🚀 Claim Workspace Ownership</span>
+            <span>🚀 Sign In</span>
           </button>
         </form>
 
         <div style="margin-top: 20px; padding: 14px; background: var(--primary-light); border-radius: var(--radius-sm); border: 1px solid var(--primary-border); font-size: 0.78rem; line-height: 1.5; color: var(--text-main);">
           <div style="font-weight: 700; margin-bottom: 4px; color: var(--primary); display: flex; align-items: center; gap: 6px;">
-            <span>☁️</span> Live Chrome &amp; Cloud Deployment
+            <span>☁️</span> Cloud Account Sync
           </div>
-          <div>All datasets, trained model tournaments, evidence graphs, and AI diagnostic reports generated in this session are encrypted and tagged with your verified Google account ownership.</div>
+          <div>All datasets, trained model tournaments, evidence graphs, and AI diagnostic reports generated in this session are securely saved to your account.</div>
         </div>
       </div>
     </div>
