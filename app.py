@@ -254,6 +254,11 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_file_response("app.js", "application/javascript; charset=utf-8")
             return
 
+        # Health check endpoint for cloud load balancers & Render
+        if path in {"/healthz", "/api/health", "/health"}:
+            self.send_json({"status": "ok", "service": "AI-Model-Root-Cause-Analyzer"})
+            return
+
         # 2. REST API: Current State
         if path == "/api/status":
             self.send_json({
