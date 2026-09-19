@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Model Root-Cause Analyzer // Machine Learning Diagnostics Dashboard</title>
+  <meta name="description" content="An enterprise-grade, evidence-driven machine learning diagnostic platform. Deterministically explains why AI models fail using interactive Plotly charts, confusion matrices, residuals, and evidence DAGs.">
+  
+  <!-- Modern App Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
+  <!-- Plotly.js Interactive Visualization Engine -->
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <!-- PapaParse for Client-Side Fallback CSV Parsing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+
+  <!-- App Header Navigation Bar -->
+  <header class="app-header">
+    <div class="brand-section" onclick="switchTab('dataset')">
+      <div class="brand-icon">🔍</div>
+      <div>
+        <span class="brand-title">Root Cause AI</span>
+        <span class="brand-badge">Diagnostics</span>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs" id="main-nav-tabs">
+      <button class="nav-tab-btn active" data-tab="dataset" onclick="switchTab('dataset')">📁 Ingest &amp; Setup</button>
+      <button class="nav-tab-btn" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
+      <button class="nav-tab-btn" data-tab="performance" onclick="switchTab('performance')">📈 Performance &amp; CV</button>
+      <button class="nav-tab-btn" data-tab="errors" onclick="switchTab('errors')">🎯 Error Analysis</button>
+      <button class="nav-tab-btn" data-tab="features" onclick="switchTab('features')">⚡ Feature Impact</button>
+      <button class="nav-tab-btn" data-tab="data-quality" onclick="switchTab('data-quality')">🧹 Data Quality</button>
+      <button class="nav-tab-btn" data-tab="evidence-dag" onclick="switchTab('evidence-dag')">🕸️ Evidence Graph</button>
+      <button class="nav-tab-btn" data-tab="ai-explainer" onclick="switchTab('ai-explainer')">🤖 AI Explainer</button>
+    </nav>
+
+    <!-- Header Actions -->
+    <div class="header-actions">
+      <!-- Google Auth / Account Section -->
+      <div class="auth-section" id="auth-section">
+        <!-- Logged Out Button -->
+        <button id="btn-google-login" class="btn-google-auth" onclick="openAuthModal()" title="Sign in with your Google Account">
+          <svg class="google-icon" viewBox="0 0 24 24" width="16" height="16">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+          </svg>
+          <span>Sign In</span>
+        </button>
+
+        <!-- Logged In User Profile Pill -->
+        <div id="user-profile-menu" class="user-profile-pill" style="display: none;" onclick="toggleUserDropdown()">
+          <img id="user-avatar-img" class="user-avatar-img" src="" alt="User Avatar" style="display: none;">
+          <div id="user-avatar-fallback" class="user-avatar-fallback">U</div>
+          <div class="user-profile-meta">
+            <span class="user-name" id="user-display-name">Owner</span>
+            <span class="user-owner-badge">Owner</span>
+          </div>
+          <svg class="dropdown-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </div>
+
+        <!-- User Dropdown Menu -->
+        <div id="user-dropdown-card" class="user-dropdown-card" style="display: none;">
+          <div class="user-card-header">
+            <div class="user-card-avatar" id="user-card-avatar-initials">U</div>
+            <div class="user-card-info">
+              <div class="user-card-name" id="user-card-full-name">Google User</div>
+              <div class="user-card-email" id="user-card-email-text">user@gmail.com</div>
+              <span class="badge badge-success" style="font-size: 0.65rem; padding: 2px 6px; margin-top: 4px;">Verified Workspace Owner</span>
+            </div>
+          </div>
+          <div class="user-card-divider"></div>
+          <div class="user-card-details">
+            <div class="user-detail-row">
+              <span class="detail-label">Project Domain:</span>
+              <span class="detail-val">Root-Cause Analyzer</span>
+            </div>
+            <div class="user-detail-row">
+              <span class="detail-label">Cloud Sync:</span>
+              <span class="detail-val" style="color: var(--success);">● Active &amp; Ready</span>
+            </div>
+            <div class="user-detail-row">
+              <span class="detail-label">Session ID:</span>
+              <span class="detail-val" id="user-session-id" style="font-family: var(--font-mono); font-size: 0.7rem;">sess_auth_active</span>
+            </div>
+          </div>
+          <div class="user-card-divider"></div>
+          <div class="user-card-actions">
+            <button class="btn btn-outline btn-sm" style="width: 100%; justify-content: center; margin-bottom: 6px;" onclick="openAuthModal()">
+              <span>⚙️ Account &amp; Cloud Settings</span>
+            </button>
+            <button class="btn btn-danger btn-sm" style="width: 100%; justify-content: center;" onclick="signOutUser()">
+              <span>Sign Out</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Theme Switcher -->
+      <button id="theme-toggle-btn" class="btn-icon" aria-label="Toggle Dark Mode" title="Toggle Dark/Light Mode">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+
+      <!-- Action Button -->
+      <button class="btn btn-primary btn-sm" onclick="switchTab('dataset')">
+        <span>+ Upload Dataset</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Secondary Context & Status Bar -->
+  <div class="context-bar">
+    <div class="dataset-info">
+      <span class="status-dot idle" id="ctx-status-dot"></span>
+      <span style="font-weight: 600; color: var(--text-main);" id="ctx-dataset-name">No Dataset Loaded</span>
+      <span>•</span>
+      <span id="ctx-dataset-meta">Upload a CSV or Excel file to begin</span>
+      <span>•</span>
+      <span>Target: <code id="ctx-target-col" style="color: var(--primary); font-weight: 700;">None</code></span>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <span class="badge badge-warning" id="ctx-risk-badge">Awaiting Ingestion</span>
+      <button class="btn btn-outline btn-sm" id="btn-reset-data" onclick="resetDataset()" style="display: none; padding: 2px 8px; font-size: 0.72rem;">New Analysis</button>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay" style="display: none;">
+    <div class="loading-spinner"></div>
+    <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 6px;" id="loading-title">Analyzing Dataset...</h3>
+    <p style="font-size: 0.85rem; color: #94A3B8; max-width: 440px; text-align: center;" id="loading-subtitle">
+      Training multi-model tournament, running permutation &amp; ablation trials, and computing evidence DAG...
+    </p>
+  </div>
+
+  <!-- Main Application Container -->
+  <main class="app-container">
+
+    <!-- ====================================================================
+         TAB 1: INGESTION & DATASET SETUP HUB
+         ==================================================================== -->
+    <div id="tab-dataset" class="tab-view tab-active">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Dataset Ingestion &amp; Diagnostic Setup</h2>
+          <p class="section-desc">Upload your CSV or Excel tabular dataset, configure target prediction column, and execute multi-tier root-cause analysis.</p>
+        </div>
+      </div>
+
+      <!-- Active Analysis Persistent Banner (when dataset is loaded/analyzed) -->
+      <div id="active-session-banner" class="active-session-card" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+              <span class="status-dot" style="background: var(--success); width: 10px; height: 10px;"></span>
+              <span class="badge badge-success">ACTIVE DIAGNOSTIC SESSION</span>
+              <span id="active-session-risk-badge" class="badge badge-primary">MODERATE RISK</span>
+            </div>
+            <h3 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 4px;" id="active-session-title">dataset.csv</h3>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;" id="active-session-desc">
+              Loaded: 250 Rows × 6 Features • Target: <code>churn</code> • Analysis outputs are retained in memory.
+            </p>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <button class="btn btn-primary btn-sm" onclick="switchTab('dashboard')">
+              <span>📊 Return to Active Dashboard →</span>
+            </button>
+            <button class="btn btn-outline btn-sm" onclick="document.getElementById('file-upload-input').click()">
+              Upload Different Dataset
+            </button>
+            <button class="btn btn-outline btn-sm" onclick="resetDataset()" style="color: var(--danger); border-color: var(--danger);">
+              Reset
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Drag and Drop Zone -->
+      <div class="card">
+        <div class="dropzone" id="upload-dropzone" onclick="document.getElementById('file-upload-input').click()">
+          <div style="font-size: 2.4rem; margin-bottom: 8px;">📤</div>
+          <h3 style="font-size: 1.2rem; margin-bottom: 4px;">Drag and Drop your CSV or Excel dataset here</h3>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">
+            Supports <code>.csv</code>, <code>.xlsx</code>, <code>.xls</code> up to 100MB • Automatic type detection &amp; target inference
+          </p>
+          <button class="btn btn-primary btn-sm" type="button">Browse Local Files</button>
+          <input type="file" id="file-upload-input" accept=".csv,.xlsx,.xls,.txt" style="display: none;">
+        </div>
+      </div>
+
+      <!-- Quick Demo Datasets -->
+      <div style="margin-top: 20px;">
+        <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 4px;">⚡ Or Launch Instant Benchmark Demo Datasets</h3>
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px;">Test the diagnostic analyzer immediately with pre-configured failure scenarios.</p>
+        
+        <div class="demo-grid">
+          <div class="demo-card" onclick="loadSampleDataset('classification')">
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span class="badge badge-primary">Classification Benchmark</span>
+                <span class="badge badge-critical">Target Leakage Failure</span>
+              </div>
+              <h4 style="font-size: 1.05rem; margin-bottom: 4px;">Credit Risk &amp; Customer Churn</h4>
+              <p style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px;">
+                250 rows × 6 features predicting default/churn status with tenure disparity and payment contract risks.
+              </p>
+            </div>
+            <button class="btn btn-outline btn-sm" style="align-self: flex-start;">Load Credit Risk Demo →</button>
+          </div>
+
+          <div class="demo-card" onclick="loadSampleDataset('regression')">
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span class="badge badge-primary">Regression Benchmark</span>
+                <span class="badge badge-warning">Continuous Prediction</span>
+              </div>
+              <h4 style="font-size: 1.05rem; margin-bottom: 4px;">Employee Compensation &amp; Bonus</h4>
+              <p style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px;">
+                200 rows × 6 continuous features predicting compensation with experience and performance metrics.
+              </p>
+            </div>
+            <button class="btn btn-outline btn-sm" style="align-self: flex-start;">Load Compensation Demo →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dataset Configuration & Preview Card -->
+      <div id="dataset-config-card" class="setup-card" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <span class="badge badge-success" style="margin-bottom: 4px;">DATASET READY FOR CONFIGURATION</span>
+            <h3 style="font-size: 1.25rem;" id="config-dataset-title">dataset.csv</h3>
+            <span style="font-size: 0.82rem; color: var(--text-muted);" id="config-dataset-meta">0 Rows × 0 Columns</span>
+          </div>
+          <button class="btn btn-success btn-lg" id="btn-run-analysis" onclick="executeAnalysis()">
+            <span>🚀 Run Root-Cause Diagnostic Analysis</span>
+          </button>
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label" for="config-target-select">Select Target Prediction Column (y)</label>
+            <select id="config-target-select" class="form-select">
+              <!-- Populated dynamically via JS -->
+            </select>
+            <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+              The variable your model attempts to predict or classify.
+            </p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="config-mode-select">Analysis Mode / Task Type</label>
+            <select id="config-mode-select" class="form-select">
+              <option value="auto">Auto-Detect (Infers classification vs regression)</option>
+              <option value="classification">Classification (Predict discrete categories/classes)</option>
+              <option value="regression">Regression (Predict continuous numeric values)</option>
+            </select>
+            <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+              Select Auto-Detect or explicitly specify the problem formulation.
+            </p>
+          </div>
+        </div>
+
+        <!-- Matrix Preview Table -->
+        <div style="margin-top: 14px;">
+          <div class="chart-header">
+            <span class="chart-title">Dataset Matrix Preview (Top Observations)</span>
+            <span class="badge badge-primary" id="config-preview-badge">First 10 Rows</span>
+          </div>
+          <div class="table-container" style="max-height: 260px; overflow-y: auto;">
+            <table class="data-table">
+              <thead>
+                <tr id="config-table-header">
+                  <!-- Dynamically populated -->
+                </tr>
+              </thead>
+              <tbody id="config-table-body">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export Suite -->
+      <div id="export-suite-section" style="margin-top: 24px; display: none;">
+        <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 12px;">📦 Analysis Export Center</h3>
+        <div class="grid-3">
+          <div class="card">
+            <h4 style="font-size: 0.95rem; margin-bottom: 6px;">Machine-Readable Audit JSON</h4>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">Full diagnostic payload containing all evidence DAG nodes, metrics, and profiles.</p>
+            <button class="btn btn-outline btn-sm" onclick="downloadFile('analysis.json')">Download JSON</button>
+          </div>
+          <div class="card">
+            <h4 style="font-size: 0.95rem; margin-bottom: 6px;">Analysis Summary CSV</h4>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">Spreadsheet summary of evaluated metrics, CV fold scores, and risk point allocations.</p>
+            <button class="btn btn-outline btn-sm" onclick="downloadFile('summary.csv')">Download CSV</button>
+          </div>
+          <div class="card">
+            <h4 style="font-size: 0.95rem; margin-bottom: 6px;">Prediction Errors CSV</h4>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">Detailed observation-level errors, confidence scores, and residuals.</p>
+            <button class="btn btn-outline btn-sm" onclick="downloadFile('prediction-errors.csv')">Download Errors CSV</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Page Navigation Footer -->
+      <div class="page-nav-footer" id="nav-footer-dataset" style="display: none;">
+        <span style="font-size: 0.85rem; color: var(--text-muted);">Step 1 of 8: Dataset Ingestion</span>
+        <button class="btn btn-primary nav-next-btn" onclick="switchTab('dashboard')">
+          <span>Next: Model Overview Dashboard →</span>
+        </button>
+      </div>
+    </div>
+
+
+    <!-- ====================================================================
+         TAB 2: DASHBOARD OVERVIEW
+         ==================================================================== -->
+    <div id="tab-dashboard" class="tab-view">
+      <div class="empty-state-card" id="empty-dashboard">
+        <div class="empty-icon">📊</div>
+        <h3 class="empty-title">No Dataset Analyzed Yet</h3>
+        <p class="empty-desc">Upload a CSV or Excel dataset, or launch an instant demo benchmark to calculate real-time model risk scores and primary failure hypotheses.</p>
+        <button class="btn btn-primary" onclick="switchTab('dataset')">📁 Ingest Dataset →</button>
+      </div>
+
+      <div id="content-dashboard" style="display: none;">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">Diagnostic Health &amp; Risk Dashboard</h2>
+            <p class="section-desc">Real-time synthesis of model reliability, risk score drivers, and primary failure hypotheses.</p>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-outline btn-sm" onclick="downloadFile('summary.csv')">Export Summary CSV</button>
+            <button class="btn btn-primary btn-sm" onclick="switchTab('ai-explainer')">View AI Fix Script →</button>
+          </div>
+        </div>
+
+        <!-- 4 Stat Scorecards -->
+        <div class="grid-4">
+          <div class="stat-card">
+            <div class="stat-label">
+              <span>Operational Risk</span>
+              <span class="badge badge-critical" id="stat-risk-badge">CRITICAL</span>
+            </div>
+            <div class="stat-value" id="stat-risk-score" style="color: var(--danger);">--</div>
+            <div class="stat-sub" id="stat-risk-sub">Analyzing vulnerability...</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-label">
+              <span>Champion Architecture</span>
+              <span class="badge badge-success">SELECTED</span>
+            </div>
+            <div class="stat-value" id="stat-champion-name" style="font-size: 1.35rem;">--</div>
+            <div class="stat-sub" id="stat-champion-sub">Highest cross-validation score</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-label">
+              <span id="stat-metric-label">Validation Metric</span>
+              <span class="badge badge-primary">TEST SPLIT</span>
+            </div>
+            <div class="stat-value" id="stat-eval-score">--</div>
+            <div class="stat-sub" id="stat-eval-sub">Balanced accuracy</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-label">
+              <span>Data Matrix Health</span>
+              <span class="badge badge-success" id="stat-health-badge">CLEAN</span>
+            </div>
+            <div class="stat-value" id="stat-health-status" style="font-size: 1.35rem; color: var(--success);">--</div>
+            <div class="stat-sub" id="stat-health-sub">0 Missing Cells • 0 Duplicates</div>
+          </div>
+        </div>
+
+        <!-- Dynamic Diagnostic Warnings & Risk Alerts Section -->
+        <div id="dashboard-warnings-container" style="margin-top: 16px; margin-bottom: 16px;">
+          <!-- Dynamically populated via renderWarnings() -->
+        </div>
+
+        <!-- Charts Grid (Risk Gauge + Domain Breakdown) -->
+        <div class="grid-2">
+          <div class="chart-card">
+            <div class="chart-header">
+              <span class="chart-title">Radial Risk Severity Gauge (0–100)</span>
+              <span class="badge badge-primary">Plotly Gauge</span>
+            </div>
+            <div id="plotly-risk-gauge" class="plotly-container" style="min-height: 260px;"></div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-header">
+              <span class="chart-title">Risk Points Contribution by Domain</span>
+              <span class="badge badge-primary">Plotly Bar</span>
+            </div>
+            <div id="plotly-risk-breakdown" class="plotly-container" style="min-height: 260px;"></div>
+          </div>
+        </div>
+
+        <!-- Prescriptive Recommendation System Section -->
+        <div class="card" style="margin-bottom: 20px; border-top: 4px solid var(--primary);">
+          <div class="chart-header">
+            <div>
+              <span class="chart-title" style="font-size: 1.05rem;">🎯 Automated Prescriptive Recommendation System</span>
+              <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">Actionable engineering steps to eliminate root-cause vulnerabilities and prevent production failure.</p>
+            </div>
+            <span class="badge badge-success">Automated Advisory</span>
+          </div>
+          <div id="dashboard-recommendations-grid" class="recommendations-container">
+            <!-- Dynamically populated via renderRecommendations() -->
+          </div>
+        </div>
+
+        <!-- Target Variable Analysis & Class Distribution Profile -->
+        <div class="card" style="margin-bottom: 20px;">
+          <div class="chart-header">
+            <span class="chart-title" id="target-profile-title">Target Variable Profile &amp; Distribution</span>
+            <span class="badge badge-primary" id="target-profile-badge">Target Metric</span>
+          </div>
+          <div id="target-profile-content" style="font-size: 0.85rem;">
+            <!-- Populated dynamically via JS -->
+          </div>
+        </div>
+
+        <!-- Priority Findings & Failure Hypotheses Card -->
+        <div class="card" style="margin-bottom: 20px;">
+          <div class="chart-header">
+            <span class="chart-title">Top Ranked Root-Cause Failure Hypotheses</span>
+            <span class="badge badge-primary">Evidence Fusion</span>
+          </div>
+          <div id="findings-list" style="display: flex; flex-direction: column; gap: 10px;">
+            <!-- Populated dynamically via JS -->
+          </div>
+        </div>
+
+        <!-- Model Selection & Generalization Policy Card -->
+        <div class="card">
+          <div class="chart-header">
+            <span class="chart-title">Model Selection &amp; Generalization Policy</span>
+            <span class="badge badge-success">Decision Rationale</span>
+          </div>
+          <div id="selection-policy-content" style="font-size: 0.85rem; line-height: 1.6; color: var(--text-main);">
+            <!-- Populated dynamically via JS -->
+          </div>
+        </div>
+
+        <!-- Page Navigation Footer -->
+        <div class="page-nav-footer">
+          <button class="btn btn-outline nav-prev-btn" onclick="switchTab('dataset')">
+            <span>← Previous: Ingest &amp; Setup</span>
+          </button>
+          <span style="font-size: 0.85rem; color: var(--text-muted);">Step 2 of 8: Dashboard Overview</span>
+          <button class="btn btn-primary nav-next-btn" onclick="switchTab('performance')">
+            <span>Next: Performance &amp; CV →</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ====================================================================
+         TAB 3: PERFORMANCE & CROSS-VALIDATION
+         ==================================================================== -->
+    <div id="tab-performance" class="tab-view">
+      <div class="empty-state-card" id="empty-performance">
+        <div class="empty-icon">📈</div>
+        <h3 class="empty-title">No Performance Metrics Available</h3>
+        <p class="empty-desc">Upload a dataset to run multi-model tournament evaluations, k-fold cross validation, and generalization gap assessments.</p>
+        <button class="btn btn-primary" onclick="switchTab('dataset')">📁 Ingest Dataset →</button>
+      </div>
+
+      <div id="content-performance" style="display: none;">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">Multi-Model Tournament &amp; CV Stability</h2>
+            <p class="section-desc">Comparative benchmark across algorithmic candidates, fold score variance, and train-vs-test generalization gaps.</p>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="chart-card">
+            <div class="chart-header">
+              <span class="chart-title">Evaluated Model Performance Metrics</span>
+              <span class="badge badge-primary">Plotly Bar</span>
+            </div>
+            <div id="plotly-performance-metrics" class="plotly-container" style="min-height: 280px;"></div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-header">
+              <span class="chart-title">5-Fold Cross-Validation Score Stability</span>
+              <span class="badge badge-primary">Plotly Stability</span>
+            </div>
+            <div id="plotly-cv-stability" class="plotly-container" style="min-height: 280px;"></div>
+          </div>
+        </div>
+
+        <!-- Multi-Model Comparison Table -->
+        <div class="card" style="margin-bottom: 20px;">
+          <div class="chart-header">
+            <span class="chart-title">Multi-Model Comparison (Test-Set vs Cross-Validation)</span>
+            <span class="badge badge-success">Evaluated Models</span>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Model Candidate</th>
+                  <th>Primary Metric</th>
+                  <th>Cross-Validation Mean</th>
+                  <th>CV Std</th>
+                  <th>Held-Out Test Score</th>
+                  <th>Train/Test Gap</th>
+                  <th>Selection Status</th>
+                </tr>
+              </thead>
+              <tbody id="tournament-table-body">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Per-Class Performance Breakdown Table (Classification) / Regression Metrics -->
+        <div class="card" id="card-class-metrics">
+          <div class="chart-header">
+            <span class="chart-title" id="class-metrics-title">Per-Class Performance Breakdown</span>
+            <span class="badge badge-primary">Class Level</span>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr id="class-metrics-table-header">
+                  <th>Target Class</th>
+                  <th>Precision</th>
+                  <th>Recall</th>
+                  <th>F1 Score</th>
+                  <th>Test Support</th>
+                  <th>Dataset Proportion</th>
+                </tr>
+              </thead>
+              <tbody id="class-metrics-table-body">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Page Navigation Footer -->
+        <div class="page-nav-footer">
+          <button class="btn btn-outline nav-prev-btn" onclick="switchTab('dashboard')">
+            <span>← Previous: Dashboard Overview</span>
+          </button>
+          <span style="font-size: 0.85rem; color: var(--text-muted);">Step 3 of 8: Performance &amp; CV</span>
+          <button class="btn btn-primary nav-next-btn" onclick="switchTab('errors')">
+            <span>Next: Error Analysis →</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ====================================================================
+         TAB 4: ERROR ANALYSIS & RESIDUALS
+         ==================================================================== -->
+    <div id="tab-errors" class="tab-view">
+      <div class="empty-state-card" id="empty-errors">
+        <div class="empty-icon">🎯</div>
+        <h3 class="empty-title">No Error Diagnostics Available</h3>
+        <p class="empty-desc">Upload a dataset to generate interactive confusion matrices, residual dispersion plots, and subpopulation disparity audits.</p>
+        <button class="btn btn-primary" onclick="switchTab('dataset')">📁 Ingest Dataset →</button>
+      </div>
+
+      <div id="content-errors" style="display: none;">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">Prediction Error Diagnostics &amp; Subgroup Disparity</h2>
+            <p class="section-desc">Granular inspection of misclassifications, high-confidence failures, residual heteroscedasticity, and subgroup error rates.</p>
+          </div>
+        </div>
+
+        <!-- Confusion Matrix Summary Metrics Bar -->
+        <div class="cm-metrics-bar" id="cm-metrics-bar">
+          <div class="cm-metric-pill">
+            <div class="label">True Positives (TP)</div>
+            <div class="val" id="cm-stat-tp" style="color: var(--success);">--</div>
+          </div>
+          <div class="cm-metric-pill">
+            <div class="label">False Positives (FP)</div>
+            <div class="val" id="cm-stat-fp" style="color: var(--danger);">--</div>
+          </div>
+          <div class="cm-metric-pill">
+            <div class="label">True Negatives (TN)</div>
+            <div class="val" id="cm-stat-tn" style="color: var(--success);">--</div>
+          </div>
+          <div class="cm-metric-pill">
+            <div class="label">False Negatives (FN)</div>
+            <div class="val" id="cm-stat-fn" style="color: var(--danger);">--</div>
+          </div>
+          <div class="cm-metric-pill">
+            <div class="label">Total Misclassifications</div>
+            <div class="val" id="cm-stat-total-errors" style="color: var(--primary);">--</div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="chart-card">
+            <div class="chart-header">
+              <span class="chart-title" id="chart-error-main-title">Confusion Matrix Heatmap</span>
+              <span class="badge badge-primary">Plotly Heatmap</span>
+            </div>
+            <div id="plotly-confusion-matrix" class="plotly-container" style="min-height: 300px;"></div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-header">
+              <span class="chart-title">Subpopulation Error Rate Disparity</span>
+              <span class="badge badge-critical">Cohort Audit</span>
+            </div>
+            <div id="plotly-subgroup-disparity" class="plotly-container" style="min-height: 300px;"></div>
+          </div>
+        </div>
+
+        <!-- High Confidence Error Records -->
+        <div class="card" style="margin-bottom: 20px;">
+          <div class="chart-header">
+            <span class="chart-title">High-Confidence Prediction Failures &amp; Residual Outliers</span>
+            <span class="badge badge-critical" id="high-conf-count-badge">0 Severe Failures</span>
+          </div>
+          <div class="table-container" style="max-height: 280px; overflow-y: auto;">
+            <table class="data-table">
+              <thead>
+                <tr id="error-table-header">
+                  <th>Row #</th>
+                  <th>Actual Ground Truth</th>
+                  <th>Model Prediction</th>
+                  <th>Error Severity / Residual</th>
+                  <th>Prediction Confidence</th>
+                </tr>
+              </thead>
+              <tbody id="error-table-body">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Subgroup & Failure Concentration Table -->
+        <div class="card">
+          <div class="chart-header">
+            <span class="chart-title">Subgroup &amp; Failure Concentration Analysis</span>
+            <span class="badge badge-warning">Cohort Audit</span>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Failure Subgroup / Segment</th>
+                  <th>Population Count</th>
+                  <th>Dataset Share (%)</th>
+                  <th>Subgroup Error Rate</th>
+                  <th>Baseline Error Rate</th>
+                  <th>Disparity Multiplier</th>
+                </tr>
+              </thead>
+              <tbody id="subgroup-table-body">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Page Navigation Footer -->
+        <div class="page-nav-footer">
+          <button class="btn btn-outline nav-prev-btn" onclick="switchTab('performance')">
+            <span>← Previous: Performance &amp; CV</span>
+          </button>
+          <span style="font-size: 0.85rem; color: var(--text-muted);">Step 4 of 8: Error Analysis</span>
+          <button class="btn btn-primary nav-next-btn" onclick="switchTab('features')">
+            <span>Next: Feature Impact →</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ====================================================================
+         TAB 5: FEATURE IMPACT & RELATIONSHIPS
+         ==================================================================== -->
+    <div id="tab-features" class="tab-view">
+      <div class="empty-state-card" id="empty-features">
+        <div class="empty-icon">⚡</div>
+        <h3 class="empty-title">No Feature Importance Data Available</h3>
+        <p class="empty-desc">Upload a dataset to run impurity gain ranking, mutual information leakage checks, and controlled feature trials.</p>
+        <button class="btn btn-primary" onclick="switchTab('dataset')">📁 Ingest Dataset →</button>
+      </div>
+
+      <div id="content-features" style="display: none;">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">Feature Impact &amp; Empirical Relationships</h2>
+            <p class="section-desc">Gini/gain feature attribution ranking, reliance concentration metrics, and target empirical relationships.</p>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="chart-card">
+            <div class="chart-header">
+              <span class="chart-title">Feature Importance Ranking</span>
+              <span class="badge badge-primary">Relative Gain Share</span>
+            </div>
+            <div id="plotly-feature-importance" class="plotly-container" style="min-height: 300px;"></div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-header">
+              <span class="chart-title">Controlled Feature Trials (Ablation vs Permutation vs Noise)</span>
+              <span class="badge badge-primary">Intervention Benchmark</span>
+            </div>
+            <div id="plotly-feature-trials" class="plotly-container" style="min-height: 300px;"></div>
+          </div>
+        </div>
+
+        <!-- Feature Influence Catalogue Table -->
+        <div class="card" style="margin-bottom: 20px;">
+          <div class="chart-header">
+            <span class="chart-title">Feature Influence &amp; Importance Hierarchy</span>
+            <span class="badge badge-primary">Impact Hierarchy</span>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Feature Name</th>
+                  <th>Attribution Score</th>
+                  <th>Relative Share %</th>
+                  <th>Model Influence Tier</th>
+                  <th>Observed Direction / Association</th>
+                </tr>
+              </thead>
+              <tbody id="feature-table-body">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Feature -> Target Empirical Relationships Table -->
+        <div class="card">
+          <div class="chart-header">
+            <span class="chart-title">Feature &rarr; Target Empirical Relationships</span>
+            <span class="badge badge-success">Quantile Profiling</span>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Feature Name</th>
+                  <th>Value Range / Segment</th>
+                  <th>Observations</th>
+                  <th>Target Outcome / Mean</th>
+                  <th>Observed Tendency</th>
+                </tr>
+              </thead>
+              <tbody id="feature-relationships-table-body">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Page Navigation Footer -->
+        <div class="page-nav-footer">
+          <button class="btn btn-outline nav-prev-btn" onclick="switchTab('errors')">
+            <span>← Previous: Error Analysis</span>
+          </button>
+          <span style="font-size: 0.85rem; color: var(--text-muted);">Step 5 of 8: Feature Impact</span>
+          <button class="btn btn-primary nav-next-btn" onclick="switchTab('data-quality')">
+            <span>Next: Data Quality →</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ====================================================================
+         TAB 6: DATA QUALITY & HYGIENE
+         ==================================================================== -->
+    <div id="tab-data-quality" class="tab-view">
+      <div class="empty-state-card" id="empty-data-quality">
+        <div class="empty-icon">🧹</div>
+        <h3 class="empty-title">No Data Quality Profile Available</h3>
+        <p class="empty-desc">Upload a dataset to run missing cell checks, IQR outlier screening, duplicate detection, and class balance profiling.</p>
+        <button class="btn btn-primary" onclick="switchTab('dataset')">📁 Ingest Dataset →</button>
+      </div>
+
+      <div id="content-data-quality" style="display: none;">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">Data Quality &amp; Hygiene Profiling</h2>
+            <p class="section-desc">Automated validation of missingness patterns, extreme outliers, target class imbalance, and duplicate records.</p>
+          </div>
+        </div>
+
+        <div class="grid-4">
+          <div class="stat-card">
+            <div class="stat-label">Missing Values</div>
+            <div class="stat-value" id="dq-missing-count" style="font-size: 1.4rem;">0</div>
+            <div class="stat-sub" id="dq-missing-sub">0.0% of total matrix cells</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Duplicate Rows</div>
+            <div class="stat-value" id="dq-duplicate-count" style="font-size: 1.4rem;">0</div>
+            <div class="stat-sub" id="dq-dupe-sub">100% unique observations</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Outliers Flagged</div>
+            <div class="stat-value" id="dq-outlier-count" style="font-size: 1.4rem;">0</div>
+            <div class="stat-sub">IQR 1.5× threshold</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Target Distribution</div>
+            <div class="stat-value" id="dq-imbalance-ratio" style="font-size: 1.3rem;">--</div>
+            <div class="stat-sub">Distribution balance</div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="chart-card">
+            <div class="chart-header">
+              <span class="chart-title">Missing Values Distribution by Column (%)</span>
+              <span class="badge badge-primary">Plotly Bar</span>
+            </div>
+            <div id="plotly-missing-values" class="plotly-container" style="min-height: 260px;"></div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-header">
+              <span class="chart-title">Outlier Frequency by Continuous Feature</span>
+              <span class="badge badge-primary">Plotly Bar</span>
+            </div>
+            <div id="plotly-outliers" class="plotly-container" style="min-height: 260px;"></div>
+          </div>
+        </div>
+
+        <!-- Column Health Table -->
+        <div class="card">
+          <div class="chart-header">
+            <span class="chart-title">Column-by-Column Deep Health Audit</span>
+            <span class="badge badge-success">Schema Verified</span>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Column Name</th>
+                  <th>Inferred Data Type</th>
+                  <th>Missing Count (%)</th>
+                  <th>Unique Values</th>
+                  <th>Outliers Detected</th>
+                  <th>Health Status &amp; Action</th>
+                </tr>
+              </thead>
+              <tbody id="column-health-table-body">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Page Navigation Footer -->
+        <div class="page-nav-footer">
+          <button class="btn btn-outline nav-prev-btn" onclick="switchTab('features')">
+            <span>← Previous: Feature Impact</span>
+          </button>
+          <span style="font-size: 0.85rem; color: var(--text-muted);">Step 6 of 8: Data Quality</span>
+          <button class="btn btn-primary nav-next-btn" onclick="switchTab('evidence-dag')">
+            <span>Next: Evidence Graph DAG →</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ====================================================================
+         TAB 7: EVIDENCE GRAPH & 5-PART RUBRIC
+         ==================================================================== -->
+    <div id="tab-evidence-dag" class="tab-view">
+      <div class="empty-state-card" id="empty-evidence-dag">
+        <div class="empty-icon">🕸️</div>
+        <h3 class="empty-title">No Evidence Graph Available</h3>
+        <p class="empty-desc">Upload a dataset to trace multi-experiment diagnostic flows from initial anomaly discovery to mathematical verification.</p>
+        <button class="btn btn-primary" onclick="switchTab('dataset')">📁 Ingest Dataset →</button>
+      </div>
+
+      <div id="content-evidence-dag" style="display: none;">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">Multi-Experiment Evidence Graph (DAG) &amp; Rubric</h2>
+            <p class="section-desc">Causal Directed Acyclic Graph connecting discovery nodes, ablation trials, permutation tests, and 5-part scoring rubrics.</p>
+          </div>
+        </div>
+
+        <!-- Evidence Sankey Graph -->
+        <div class="chart-card" style="margin-bottom: 20px;">
+          <div class="chart-header">
+            <span class="chart-title">Multi-Experiment Evidence Flow (Sankey Graph)</span>
+            <span class="badge badge-success">Interactive DAG</span>
+          </div>
+          <div id="plotly-evidence-dag" class="plotly-container" style="min-height: 480px;"></div>
+        </div>
+
+        <!-- Automated Root-Cause Verification Experiments Table -->
+        <div class="card" style="margin-bottom: 20px;">
+          <div class="chart-header">
+            <span class="chart-title">Automated Root-Cause Verification Experiments</span>
+            <span class="badge badge-success">Multi-Tier Trials</span>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Candidate Feature</th>
+                  <th>Evaluation Metric</th>
+                  <th>Baseline Metric</th>
+                  <th>Ablation Delta (Δ)</th>
+                  <th>Permutation Delta (Δ)</th>
+                  <th>Noise Stability (10% σ)</th>
+                  <th>Control Delta (Δ)</th>
+                  <th>Evidence Score</th>
+                  <th>Causal Verdict</th>
+                </tr>
+              </thead>
+              <tbody id="verification-experiments-table-body">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Interactive 5-Part Rubric Calculator -->
+        <div class="grid-2">
+          <div class="card">
+            <div class="chart-header">
+              <span class="chart-title">5-Part Scoring Rubric Calculator</span>
+              <span class="badge badge-success" id="rubric-grade-val">VERIFIED ROOT CAUSE</span>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 16px;">
+              Adjust experimental weights to simulate rubric score thresholds (85+ Verified, 60+ Candidate, &lt;60 Spurious).
+            </p>
+
+            <div style="display: flex; flex-direction: column; gap: 14px;">
+              <div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.82rem; font-weight: 600; margin-bottom: 4px;">
+                  <span>1. Retrained Ablation Delta (Max 35 pts)</span>
+                  <span id="val-ablation" style="color: var(--primary);">30.0 / 35</span>
+                </div>
+                <input type="range" id="slider-ablation" min="0" max="35" step="0.5" value="30" style="width: 100%;">
+              </div>
+
+              <div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.82rem; font-weight: 600; margin-bottom: 4px;">
+                  <span>2. Permutation Feature Shuffle (Max 35 pts)</span>
+                  <span id="val-permutation" style="color: var(--primary);">32.0 / 35</span>
+                </div>
+                <input type="range" id="slider-permutation" min="0" max="35" step="0.5" value="32" style="width: 100%;">
+              </div>
+
+              <div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.82rem; font-weight: 600; margin-bottom: 4px;">
+                  <span>3. Negative Control Baseline (Max 15 pts)</span>
+                  <span id="val-control" style="color: var(--primary);">14.0 / 15</span>
+                </div>
+                <input type="range" id="slider-control" min="0" max="15" step="0.5" value="14" style="width: 100%;">
+              </div>
+
+              <div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.82rem; font-weight: 600; margin-bottom: 4px;">
+                  <span>4. Measurement Stability Under Noise (Max 10 pts)</span>
+                  <span id="val-stability" style="color: var(--primary);">9.0 / 10</span>
+                </div>
+                <input type="range" id="slider-stability" min="0" max="10" step="0.5" value="9" style="width: 100%;">
+              </div>
+
+              <div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.82rem; font-weight: 600; margin-bottom: 4px;">
+                  <span>5. Observational Consistency (Max 5 pts)</span>
+                  <span id="val-consistency" style="color: var(--primary);">5.0 / 5</span>
+                </div>
+                <input type="range" id="slider-consistency" min="0" max="5" step="0.5" value="5" style="width: 100%;">
+              </div>
+
+              <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 700; font-size: 0.95rem;">Composite Evidence Score:</span>
+                <span id="rubric-total-val" style="font-size: 1.4rem; font-weight: 800; color: var(--primary);">90/100</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- DAG Node Specification Inspector -->
+          <div class="card">
+            <div class="chart-header">
+              <span class="chart-title">DAG Node Inspector</span>
+              <span class="badge badge-primary">Select Node</span>
+            </div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px;">
+              <button class="btn btn-primary btn-sm dag-node-btn active" id="dag-btn-candidate" onclick="inspectDagNode('candidate')">Candidate</button>
+              <button class="btn btn-outline btn-sm dag-node-btn" id="dag-btn-ablation_experiment" onclick="inspectDagNode('ablation_experiment')">Ablation</button>
+              <button class="btn btn-outline btn-sm dag-node-btn" id="dag-btn-permutation_experiment" onclick="inspectDagNode('permutation_experiment')">Permutation</button>
+              <button class="btn btn-outline btn-sm dag-node-btn" id="dag-btn-control_experiment" onclick="inspectDagNode('control_experiment')">Control</button>
+              <button class="btn btn-outline btn-sm dag-node-btn" id="dag-btn-stability_experiment" onclick="inspectDagNode('stability_experiment')">Stability</button>
+              <button class="btn btn-outline btn-sm dag-node-btn" id="dag-btn-verdict" onclick="inspectDagNode('verdict')">Verdict</button>
+              <button class="btn btn-outline btn-sm dag-node-btn" id="dag-btn-remediation_result" onclick="inspectDagNode('remediation_result')">Proof</button>
+            </div>
+
+            <div id="dag-node-inspector-box" class="dag-inspector-container">
+              <!-- Dynamically populated by inspectDagNode() -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Page Navigation Footer -->
+        <div class="page-nav-footer">
+          <button class="btn btn-outline nav-prev-btn" onclick="switchTab('data-quality')">
+            <span>← Previous: Data Quality</span>
+          </button>
+          <span style="font-size: 0.85rem; color: var(--text-muted);">Step 7 of 8: Evidence Graph DAG</span>
+          <button class="btn btn-primary nav-next-btn" onclick="switchTab('ai-explainer')">
+            <span>Next: AI Explainer &amp; Auto-Fix →</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ====================================================================
+         TAB 8: AI EXPLAINER & REMEDIATION PIPELINE
+         ==================================================================== -->
+    <div id="tab-ai-explainer" class="tab-view">
+      <div class="empty-state-card" id="empty-ai-explainer">
+        <div class="empty-icon">🤖</div>
+        <h3 class="empty-title">No AI Remediation Script Generated Yet</h3>
+        <p class="empty-desc">Upload a dataset to run closed-loop simulation verification, generate grounded audit summaries, and produce custom Python fix scripts.</p>
+        <button class="btn btn-primary" onclick="switchTab('dataset')">📁 Ingest Dataset →</button>
+      </div>
+
+      <div id="content-ai-explainer" style="display: none;">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">Grounded AI Explainer &amp; Auto-Fix Generator</h2>
+            <p class="section-desc">Empirically grounded executive audit, closed-loop simulation verification, and runnable Python repair scripts.</p>
+          </div>
+        </div>
+
+        <!-- Closed Loop Simulation Proof -->
+        <div class="card" style="border-left: 4px solid var(--success); background: var(--success-light); margin-bottom: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+            <div>
+              <span class="badge badge-success">CLOSED-LOOP PROOF OF FIX</span>
+              <h3 style="font-size: 1.25rem; color: #14532D; margin-top: 4px;">Verified Held-Out Generalization Improvement</h3>
+            </div>
+            <span class="badge badge-success" style="font-size: 0.8rem; padding: 6px 12px;" id="sim-proof-badge">FIX VERIFIED</span>
+          </div>
+          <div class="grid-4" style="margin-bottom: 10px;">
+            <div style="background: white; padding: 12px; border-radius: 6px; border: 1px solid var(--success-border);">
+              <div style="font-size: 0.72rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Baseline Test Metric</div>
+              <div id="sim-b-test" style="font-size: 1.3rem; font-weight: 700; color: #0F172A;">--</div>
+              <div style="font-size: 0.7rem; color: var(--text-muted);" id="sim-b-sub">Original pipeline</div>
+            </div>
+            <div style="background: white; padding: 12px; border-radius: 6px; border: 1px solid var(--success-border);">
+              <div style="font-size: 0.72rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Remediated Test Metric</div>
+              <div id="sim-r-test" style="font-size: 1.3rem; font-weight: 700; color: var(--success);">--</div>
+              <div style="font-size: 0.7rem; color: var(--text-muted);" id="sim-r-sub">Post-intervention</div>
+            </div>
+            <div style="background: white; padding: 12px; border-radius: 6px; border: 1px solid var(--success-border);">
+              <div style="font-size: 0.72rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Held-Out Test Delta</div>
+              <div id="sim-d-test" style="font-size: 1.3rem; font-weight: 700; color: var(--success);">--</div>
+              <div style="font-size: 0.7rem; color: var(--text-muted);">Real-world gain</div>
+            </div>
+            <div style="background: white; padding: 12px; border-radius: 6px; border: 1px solid var(--success-border);">
+              <div style="font-size: 0.72rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Overfit Gap Reduction</div>
+              <div id="sim-d-gap" style="font-size: 1.3rem; font-weight: 700; color: var(--success);">--</div>
+              <div style="font-size: 0.7rem; color: var(--text-muted);">Generalization stability</div>
+            </div>
+          </div>
+          <div id="sim-proof-text" style="font-size: 0.85rem; color: #14532D;">
+            <strong>Empirical Proof:</strong> Remediation eliminated target leakage and restored robust test-set generalization.
+          </div>
+        </div>
+
+        <!-- AI Summary & Global Project Intelligence Center Grid -->
+        <div class="grid-2">
+          <div class="card">
+            <div class="chart-header">
+              <span class="chart-title">AI Executive Root-Cause Summary</span>
+              <span class="badge badge-primary">Google Gemini</span>
+            </div>
+            <div id="ai-summary-text" class="chat-markdown" style="font-size: 0.88rem; color: var(--text-main); line-height: 1.65;">
+              Diagnostic evaluation in progress...
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="chart-header">
+              <span class="chart-title">Global Project Diagnostic Chatbot</span>
+              <span class="badge badge-success">Full Project Intelligence</span>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px;">
+              Ask anything about the entire diagnostic methodology, causal verification formulas, 5-part rubric scoring, or remediation code.
+            </p>
+            
+            <div class="quick-prompts-container" id="global-chatbot-prompts" style="margin-bottom: 10px;">
+              <span class="quick-prompt-chip" onclick="askGlobalCopilot('Explain the mathematical formula for the 5-part evidence score.')">📊 5-Part Rubric Formula</span>
+              <span class="quick-prompt-chip" onclick="askGlobalCopilot('Why is the primary feature considered a verified root cause?')">🔍 Causal Root Cause</span>
+              <span class="quick-prompt-chip" onclick="askGlobalCopilot('How does the auto-fix script eliminate target leakage?')">🐍 Remediation Code Details</span>
+              <span class="quick-prompt-chip" onclick="askGlobalCopilot('What causes the subpopulation error rate disparity in this model?')">⚖️ Subgroup Disparities</span>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <div id="copilot-reply-box" class="chat-markdown" style="background: var(--bg-subtle); padding: 14px; border-radius: var(--radius-sm); font-size: 0.84rem; line-height: 1.6; min-height: 120px; max-height: 240px; overflow-y: auto; border: 1px solid var(--border-color);">
+                Ask the AI Copilot any question about this model's failure points, subpopulation disparities, causal DAG lineage, or Python remediation script.
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" id="copilot-question-input" class="form-input" placeholder="e.g., Why did the model fail on short tenure users?" style="padding: 9px 12px; font-size: 0.84rem;">
+                <button class="btn btn-primary btn-sm" onclick="askCopilot()" id="btn-copilot-ask" style="padding: 0 16px;">Ask AI</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Auto-Fix Python Pipeline Script -->
+        <div class="code-viewer" style="margin-top: 20px;">
+          <div class="code-header">
+            <span>🐍 Auto-Generated Remediation Pipeline Script (fix_pipeline.py)</span>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-outline btn-sm" onclick="copyRemediationCode()" style="padding: 4px 10px; font-size: 0.72rem; color: white; border-color: #475569;">
+                Copy Script
+              </button>
+              <button class="btn btn-primary btn-sm" onclick="downloadFile('fix_pipeline.py')" style="padding: 4px 10px; font-size: 0.72rem;">
+                Download .py
+              </button>
+            </div>
+          </div>
+          <pre class="code-body"><code id="ai-script-content"># Loading remediation script...</code></pre>
+        </div>
+
+        <!-- Page Navigation Footer -->
+        <div class="page-nav-footer">
+          <button class="btn btn-outline nav-prev-btn" onclick="switchTab('evidence-dag')">
+            <span>← Previous: Evidence Graph DAG</span>
+          </button>
+          <span style="font-size: 0.85rem; color: var(--text-muted);">Step 8 of 8: AI Explainer &amp; Remediation</span>
+          <button class="btn btn-primary" onclick="switchTab('dashboard')" style="font-weight: 600;">
+            <span>📊 Return to Step 2 Dashboard →</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- App Footer -->
+  <footer class="app-footer">
+    <div><strong>Root Cause AI Platform</strong> • Enterprise Evidence-Driven Machine Learning Diagnostics</div>
+    <div>100% Grounded Calculations • Zero AI Hallucination</div>
+  </footer>
+
+  <!-- Floating Context-Aware AI Copilot Launcher -->
+  <div id="floating-copilot-launcher" class="floating-copilot-pill" onclick="toggleFloatingCopilot()" title="Open Context-Aware AI Copilot">
+    <span class="copilot-sparkle">🤖</span>
+    <span>Ask AI Copilot</span>
+    <span class="copilot-context-tag" id="floating-copilot-context-tag">Step 1: Setup</span>
+  </div>
+
+  <!-- Floating Context-Aware AI Copilot Slide-Out Drawer -->
+  <aside id="floating-copilot-drawer" class="floating-copilot-drawer" aria-label="AI Diagnostic Copilot Drawer">
+    <div class="drawer-header">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 1.3rem;">🤖</span>
+        <div>
+          <h3 style="font-size: 1rem; font-weight: 700; margin: 0;">AI Diagnostic Copilot</h3>
+          <span style="font-size: 0.72rem; color: var(--success); font-weight: 600;">● Grounded with 17 Diagnostic Engines</span>
+        </div>
+      </div>
+      <button class="btn-icon" onclick="toggleFloatingCopilot()" aria-label="Close Copilot" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-muted);">✕</button>
+    </div>
+
+    <div class="drawer-context-strip">
+      <span>Active Focus: <strong id="drawer-active-context-name">Step 1: Ingest &amp; Setup</strong></span>
+      <span class="badge badge-primary" id="drawer-dataset-tag">No Dataset</span>
+    </div>
+
+    <div class="drawer-chat-body" id="drawer-chat-messages">
+      <div class="chat-bubble chat-bubble-ai">
+        <div class="ai-bubble-header">🤖 Diagnostic Assistant</div>
+        <div class="chat-markdown">
+          Hello! I am your <strong>Context-Aware Root-Cause Copilot</strong>. I have real-time access to this page's metrics, model tournament results, evidence graph DAG, and data hygiene audits. 
+          <br><br>
+          Select a quick question below or type your custom inquiry:
+        </div>
+      </div>
+    </div>
+
+    <div class="drawer-footer">
+      <div class="quick-prompts-container" id="drawer-quick-prompts">
+        <!-- Dynamically populated based on active tab -->
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <input type="text" id="drawer-copilot-input" class="form-input" placeholder="Ask about this page or dataset..." style="padding: 9px 12px; font-size: 0.84rem;">
+        <button class="btn btn-primary" onclick="sendDrawerCopilotQuestion()" id="btn-drawer-copilot-send" style="padding: 0 16px;">
+          <span>Send</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Google & Cloud Authentication Modal -->
+  <div id="auth-modal" class="modal-overlay" style="display: none;" onclick="if(event.target === this) closeAuthModal()">
+    <div class="modal-card" style="max-width: 520px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 36px; height: 36px; border-radius: 50%; background: var(--bg-surface-elevated); display: flex; align-items: center; justify-content: center;">
+            <svg viewBox="0 0 24 24" width="20" height="20">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+            </svg>
+          </div>
+          <div>
+            <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700;">Google Account &amp; Workspace Ownership</h3>
+            <span style="font-size: 0.76rem; color: var(--text-muted);">Secure Gmail authentication and dataset ownership</span>
+          </div>
+        </div>
+        <button class="btn-icon" onclick="closeAuthModal()" style="background:none; border:none; font-size: 1.2rem; cursor: pointer; color: var(--text-muted);">✕</button>
+      </div>
+
+      <div class="modal-body" style="padding: 20px 24px;">
+        <!-- Status Card if Signed In -->
+        <div id="auth-status-logged-in" style="display: none; background: var(--bg-surface-elevated); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px; margin-bottom: 20px;">
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <div id="modal-user-avatar-badge" style="width: 44px; height: 44px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.2rem;">U</div>
+            <div style="flex: 1;">
+              <div id="modal-user-name" style="font-weight: 700; font-size: 1rem;">Owner</div>
+              <div id="modal-user-email" style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">user@gmail.com</div>
+              <span class="badge badge-success" style="margin-top: 4px; display: inline-block;">● Active Workspace Owner</span>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="signOutUser()">Sign Out</button>
+          </div>
+        </div>
+
+        <!-- 1-Click Google Sign-In Option -->
+        <div style="text-align: center; margin-bottom: 20px;">
+          <button id="btn-modal-google-sso" class="btn-google-sso-large" onclick="signInWithGoogleSSO()">
+            <svg viewBox="0 0 24 24" width="20" height="20">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+            </svg>
+            <span>Continue with Google / Gmail</span>
+          </button>
+          <div style="font-size: 0.76rem; color: var(--text-muted); margin-top: 8px;">Authenticates directly with your Google Profile in Chrome</div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
+          <div style="flex: 1; height: 1px; background: var(--border-color);"></div>
+          <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">or enter your Gmail account</span>
+          <div style="flex: 1; height: 1px; background: var(--border-color);"></div>
+        </div>
+
+        <!-- Custom Gmail Direct Entry -->
+        <form onsubmit="handleManualGmailSignIn(event)" style="display: flex; flex-direction: column; gap: 12px;">
+          <div class="form-group" style="margin: 0;">
+            <label class="form-label" for="input-auth-name">Your Full Name / Display Name</label>
+            <input type="text" id="input-auth-name" class="form-input" placeholder="e.g., Ragul" value="Ragul" required>
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label class="form-label" for="input-auth-email">Gmail Address</label>
+            <input type="email" id="input-auth-email" class="form-input" placeholder="e.g., ragul08l03l2007@gmail.com" value="ragul08l03l2007@gmail.com" required>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 10px; margin-top: 4px;">
+            <span>🚀 Claim Workspace Ownership</span>
+          </button>
+        </form>
+
+        <div style="margin-top: 20px; padding: 14px; background: var(--primary-light); border-radius: var(--radius-sm); border: 1px solid var(--primary-border); font-size: 0.78rem; line-height: 1.5; color: var(--text-main);">
+          <div style="font-weight: 700; margin-bottom: 4px; color: var(--primary); display: flex; align-items: center; gap: 6px;">
+            <span>☁️</span> Live Chrome &amp; Cloud Deployment
+          </div>
+          <div>All datasets, trained model tournaments, evidence graphs, and AI diagnostic reports generated in this session are encrypted and tagged with your verified Google account ownership.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="app.js"></script>
+</body>
+</html>

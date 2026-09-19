@@ -1,186 +1,112 @@
 # test_server_endpoints.py
+"""
+Integration verification test for app.py REST endpoints and HTML structure using standard library urllib.
+"""
 
-import io
-import json
 import threading
 import time
+import json
 import urllib.request
-import urllib.parse
-from http.server import ThreadingHTTPServer
+import urllib.error
+from app import ThreadingHTTPServer, AppHandler, HOST, PORT
 
-import pandas as pd
-from app import AppHandler, reset_state
+def http_get(url):
+    req = urllib.request.Request(url)
+    with urllib.request.urlopen(req) as response:
+        return response.status, response.headers, response.read()
 
+def http_post_json(url, data):
+    payload = json.dumps(data).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req) as response:
+        return response.status, response.headers, response.read()
 
-def run_test():
-    reset_state()
-    server = ThreadingHTTPServer(("localhost", 8081), AppHandler)
+def run_tests():
+    test_port = 8008
+    server = ThreadingHTTPServer((HOST, test_port), AppHandler)
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
+    print(f"[*] Server started on thread port {test_port}.")
     time.sleep(0.5)
 
-    base_url = "http://localhost:8081"
+    base_url = f"http://{HOST}:{test_port}"
 
     try:
-        # 1. GET /
-        req = urllib.request.urlopen(f"{base_url}/")
-        assert req.status == 200, f"Expected 200 on /, got {req.status}"
-        html = req.read().decode("utf-8")
-        assert "AI Model Root-Cause Analyzer" in html
-        print("-> GET / passed (200)")
+        # 1. Test GET /
+        print("\n--- 1. Testing GET / (HTML) ---")
+        status, headers, body = http_get(f"{base_url}/")
+        html_text = body.decode("utf-8")
+        assert status == 200, f"Expected 200, got {status}"
+        assert "Root Cause AI" in html_text, "Title not in HTML"
+        assert "plotly-risk-gauge" in html_text, "Plotly gauge container missing"
+        assert "config-target-select" in html_text, "Target select missing"
+        print("[OK] GET / successfully rendered index.html")
 
-        # 2. POST /upload
-        csv_data = (
-            "id,age,income,score,risk\n"
-            "1,25,50000,75,0\n"
-            "2,35,80000,82,0\n"
-            "3,45,60000,45,1\n"
-            "4,55,95000,90,0\n"
-            "5,22,30000,30,1\n"
-            "6,60,110000,88,0\n"
-            "7,29,45000,60,0\n"
-            "8,41,70000,50,1\n"
-            "9,38,72000,55,1\n"
-            "10,50,90000,80,0\n"
-        ).encode("utf-8")
+        # 2. Test GET /styles.css and /app.js
+        print("\n--- 2. Testing Static Assets ---")
+        status, headers, _ = http_get(f"{base_url}/styles.css")
+        assert status == 200 and "text/css" in headers.get("Content-Type", "")
+        status, headers, _ = http_get(f"{base_url}/app.js")
+        assert status == 200 and "javascript" in headers.get("Content-Type", "")
+        print("[OK] Static CSS and JS assets served correctly")
 
-        boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
-        body = (
-            f"--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="mode"\r\n\r\n'
-            f"auto\r\n"
-            f"--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="dataset"; filename="test_credit.csv"\r\n'
-            f"Content-Type: text/csv\r\n\r\n"
-        ).encode("utf-8") + csv_data + f"\r\n--{boundary}--\r\n".encode("utf-8")
+        # 3. Test GET /api/sample?type=classification
+        print("\n--- 3. Testing GET /api/sample (Classification) ---")
+        status, headers, body = http_get(f"{base_url}/api/sample?type=classification")
+        assert status == 200, f"Expected 200, got {status}"
+        sample_data = json.loads(body.decode("utf-8"))
+        assert sample_data.get("filename") == "random_test_dataset.csv"
+        assert sample_data.get("rows") == 250
+        assert "churn" in sample_data.get("columns", [])
+        assert len(sample_data.get("preview", [])) > 0
+        target_col = sample_data.get("suggested_target", "churn")
+        print(f"[OK] Loaded sample dataset: {sample_data.get('filename')} ({sample_data.get('rows')} rows, Target: {target_col})")
 
-        post_req = urllib.request.Request(
-            f"{base_url}/upload",
-            data=body,
-            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}
-        )
+        # 4. Test POST /api/analyze
+        print("\n--- 4. Testing POST /api/analyze ---")
+        analyze_payload = {
+            "target": target_col,
+            "mode": "classification"
+        }
+        status, headers, body = http_post_json(f"{base_url}/api/analyze", analyze_payload)
+        assert status == 200, f"Expected 200, got {status}"
+        res_json = json.loads(body.decode("utf-8"))
+        assert res_json.get("status") == "success"
+        assert "result" in res_json
+        assert "visualizations" in res_json
+        assert "ai_summary" in res_json
+        assert "fix_script" in res_json
+        risk_score = res_json["result"].get("risk_score")
+        print(f"[OK] Analysis executed successfully! Calculated Risk Score: {risk_score}/100")
 
-        class NoRedirect(urllib.request.HTTPRedirectHandler):
-            def redirect_request(self, req, fp, code, msg, headers, newurl):
-                return None
+        # 5. Test POST /api/copilot/chat
+        print("\n--- 5. Testing POST /api/copilot/chat ---")
+        chat_payload = {"question": "What is the primary root cause of failure in this model?"}
+        status, headers, body = http_post_json(f"{base_url}/api/copilot/chat", chat_payload)
+        assert status == 200, f"Expected 200, got {status}"
+        chat_json = json.loads(body.decode("utf-8"))
+        assert "reply" in chat_json
+        print(f"[OK] Copilot response: {chat_json.get('reply')[:120]}...")
 
-        opener = urllib.request.build_opener(NoRedirect)
-        try:
-            resp = opener.open(post_req)
-            status = resp.status
-            loc = resp.headers.get("Location")
-        except urllib.error.HTTPError as e:
-            status = e.code
-            loc = e.headers.get("Location")
+        # 6. Test File Export
+        print("\n--- 6. Testing File Export Endpoints ---")
+        status, headers, body = http_get(f"{base_url}/download/summary.csv")
+        assert status == 200
+        assert "filename" in body.decode("utf-8")
+        status, headers, body = http_get(f"{base_url}/download/analysis.json")
+        assert status == 200
+        status, headers, body = http_get(f"{base_url}/download/fix_pipeline.py")
+        assert status == 200
+        print("[OK] All download endpoints (summary.csv, analysis.json, fix_pipeline.py) verified")
 
-        assert status == 302 and loc == "/preview", f"Expected 302 -> /preview, got {status} -> {loc}"
-        print("-> POST /upload passed (302 -> /preview)")
-
-        # 3. GET /preview
-        resp = urllib.request.urlopen(f"{base_url}/preview")
-        assert resp.status == 200
-        preview_html = resp.read().decode("utf-8")
-        assert "test_credit.csv" in preview_html
-        assert "income" in preview_html
-        print("-> GET /preview passed (200)")
-
-        # 4. POST /analyze
-        form_data = urllib.parse.urlencode({"target": "risk", "mode": "auto"}).encode("utf-8")
-        analyze_req = urllib.request.Request(
-            f"{base_url}/analyze",
-            data=form_data,
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
-        )
-        try:
-            resp = opener.open(analyze_req)
-            status = resp.status
-            loc = resp.headers.get("Location")
-        except urllib.error.HTTPError as e:
-            status = e.code
-            loc = e.headers.get("Location")
-
-        assert status == 302 and loc == "/dashboard", f"Expected 302 -> /dashboard, got {status} -> {loc}"
-        print("-> POST /analyze passed (302 -> /dashboard)")
-
-        # 5. GET /dashboard
-        resp = urllib.request.urlopen(f"{base_url}/dashboard")
-        assert resp.status == 200
-        dash_html = resp.read().decode("utf-8")
-        assert "Multi-Model Comparison" in dash_html
-        assert "Diagnostic Signals &amp; Root-Cause Hypotheses" in dash_html or "Diagnostic Signals & Root-Cause Hypotheses" in dash_html or "Evidence-Based Root-Cause Candidates" in dash_html
-        assert "np.int" not in dash_html, "NumPy type found in dashboard HTML!"
-        print("-> GET /dashboard passed (200, clean HTML with no numpy types)")
-
-        # 6. GET /download/analysis.json
-        resp = urllib.request.urlopen(f"{base_url}/download/analysis.json")
-        assert resp.status == 200
-        json_data = json.loads(resp.read().decode("utf-8"))
-        assert "dataset" in json_data and "analysis" in json_data
-        print("-> GET /download/analysis.json passed (valid JSON)")
-
-        # 7. GET /download/summary.csv
-        resp = urllib.request.urlopen(f"{base_url}/download/summary.csv")
-        assert resp.status == 200
-        summary_csv = resp.read().decode("utf-8-sig")
-        assert "selected_model" in summary_csv
-        print("-> GET /download/summary.csv passed")
-
-        # 8. GET /download/prediction-errors.csv
-        resp = urllib.request.urlopen(f"{base_url}/download/prediction-errors.csv")
-        assert resp.status == 200
-        err_csv = resp.read().decode("utf-8-sig")
-        assert "row" in err_csv and "actual" in err_csv
-        print("-> GET /download/prediction-errors.csv passed")
-
-        # 9. GET /download/remediation_script.py
-        resp = urllib.request.urlopen(f"{base_url}/download/remediation_script.py")
-        assert resp.status == 200
-        script_content = resp.read().decode("utf-8")
-        assert len(script_content) > 50
-        compile(script_content, "<string>", "exec")
-        print("-> GET /download/remediation_script.py passed (valid Python syntax)")
-
-        # 10. POST /api/copilot/chat
-        chat_payload = json.dumps({"question": "Why is the model underperforming?"}).encode("utf-8")
-        chat_req = urllib.request.Request(
-            f"{base_url}/api/copilot/chat",
-            data=chat_payload,
-            headers={"Content-Type": "application/json"}
-        )
-        chat_resp = urllib.request.urlopen(chat_req)
-        assert chat_resp.status == 200
-        chat_json = json.loads(chat_resp.read().decode("utf-8"))
-        assert chat_json["status"] == "success" and "reply" in chat_json and len(chat_json["reply"]) > 10
-        print(f"-> POST /api/copilot/chat passed ({chat_json['provider']})")
-
-        # 11. GET /back-to-preview
-        try:
-            resp = opener.open(f"{base_url}/back-to-preview")
-            status = resp.status
-            loc = resp.headers.get("Location")
-        except urllib.error.HTTPError as e:
-            status = e.code
-            loc = e.headers.get("Location")
-        assert status == 302 and loc == "/preview"
-        print("-> GET /back-to-preview passed (302 -> /preview)")
-
-        # 10. GET /back-to-upload
-        try:
-            resp = opener.open(f"{base_url}/back-to-upload")
-            status = resp.status
-            loc = resp.headers.get("Location")
-        except urllib.error.HTTPError as e:
-            status = e.code
-            loc = e.headers.get("Location")
-        assert status == 302 and loc == "/"
-        print("-> GET /back-to-upload passed (302 -> /)")
-
-        print("\nALL SERVER ROUTE & ENDPOINT INTEGRATION TESTS PASSED PERFECTLY!")
+        print("\n" + "=" * 50)
+        print(" [OK] ALL INTEGRATION TESTS PASSED 100% PERFECTLY!")
+        print("=" * 50)
 
     finally:
         server.shutdown()
         server.server_close()
-
+        print("[*] Server shutdown cleanly.")
 
 if __name__ == "__main__":
-    run_test()
+    run_tests()

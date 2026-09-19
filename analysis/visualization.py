@@ -140,8 +140,8 @@ def build_risk_gauge_chart(result: Dict[str, Any]) -> Dict[str, Any]:
     }]
 
     layout = {
-        "margin": {"l": 30, "r": 30, "t": 40, "b": 20},
-        "height": 220,
+        "margin": {"l": 30, "r": 30, "t": 65, "b": 25},
+        "height": 260,
         "autosize": True,
         "paper_bgcolor": "rgba(0,0,0,0)",
         "font": {"family": "system-ui, sans-serif"}
