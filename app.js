@@ -1283,22 +1283,27 @@ function renderFeatureImpactTab(result) {
 // 5. DATA QUALITY TAB RENDERER
 // --------------------------------------------------------------------------
 function renderDataQualityTab(dq) {
-  const missing = dq.total_missing_cells || dq.missing_cells || 0;
-  const dupes = dq.duplicate_rows || dq.duplicate_count || 0;
-  const outliers = dq.total_outliers || dq.outliers_count || 0;
+  dq = dq || appState.analysis?.data_quality || {};
+  const missing = dq.total_missing_cells ?? (dq.missing_cells ?? 0);
+  const dupes = dq.duplicate_rows ?? (dq.duplicate_count ?? 0);
+  const outliers = dq.total_outliers ?? (dq.outliers_count ?? (dq.outliers ? Object.values(dq.outliers).reduce((a, b) => a + (Number(b) || 0), 0) : 0));
   const imbalance = dq.imbalance_ratio || dq.class_balance || "Balanced (1.2 : 1)";
 
-  document.getElementById("dq-missing-count").textContent = missing.toLocaleString();
-  document.getElementById("dq-duplicate-count").textContent = dupes.toLocaleString();
-  document.getElementById("dq-outlier-count").textContent = outliers.toLocaleString();
-  document.getElementById("dq-imbalance-ratio").textContent = imbalance;
+  const missEl = document.getElementById("dq-missing-count");
+  if (missEl) missEl.textContent = missing.toLocaleString();
+  const dupEl = document.getElementById("dq-duplicate-count");
+  if (dupEl) dupEl.textContent = dupes.toLocaleString();
+  const outEl = document.getElementById("dq-outlier-count");
+  if (outEl) outEl.textContent = outliers.toLocaleString();
+  const imbEl = document.getElementById("dq-imbalance-ratio");
+  if (imbEl) imbEl.textContent = imbalance;
 
   const missChart = appState.analysis?.visualizations?.data_quality_missing || 
                     appState.analysis?.visualizations?.missing_values;
   if (missChart) {
     Plotly.newPlot("plotly-missing-values", missChart.data, missChart.layout, missChart.config);
   } else {
-    renderFallbackMissingChart();
+    renderFallbackMissingChart(dq);
   }
 
   const outChart = appState.analysis?.visualizations?.target_distribution || 
@@ -1306,27 +1311,100 @@ function renderDataQualityTab(dq) {
   if (outChart) {
     Plotly.newPlot("plotly-outliers", outChart.data, outChart.layout, outChart.config);
   } else {
-    renderFallbackOutlierChart();
+    renderFallbackOutlierChart(dq);
   }
 
   // Column Health Table
   const tbody = document.getElementById("column-health-table-body");
   if (tbody) {
     tbody.innerHTML = "";
-    const cols = appState.dataset?.columns || [];
+    const cols = appState.dataset?.columns || dq.column_names || [];
+    const totalRows = appState.dataset?.rows || dq.total_rows || 1;
+
     cols.forEach(col => {
       const tr = document.createElement("tr");
-      const dt = appState.dataset?.dtypes?.[col] || "numeric";
-      const colMissing = dq.missing_by_column?.[col] || 0;
-      const isClean = colMissing === 0;
+      const dt = appState.dataset?.dtypes?.[col] || dq.column_types?.[col] || "numeric";
+      const isTarget = col === appState.dataset?.suggested_target || col === appState.analysis?.target_column;
+
+      // 1. Missingness
+      const colMissing = dq.missing_values?.[col] ?? (dq.missing_by_column?.[col] ?? 0);
+      const colMissingPct = dq.missing_percentages?.[col] !== undefined 
+        ? Number(dq.missing_percentages[col]).toFixed(1) 
+        : ((colMissing / totalRows) * 100).toFixed(1);
+
+      // 2. Cardinality / Unique count
+      const nunique = dq.unique_counts?.[col] !== undefined ? dq.unique_counts[col] : (dq.cardinality?.[col] ?? "N/A");
+      const uRatio = dq.unique_ratios?.[col] !== undefined ? dq.unique_ratios[col] : (typeof nunique === 'number' ? ((nunique / totalRows) * 100).toFixed(1) : null);
+      
+      let uniqueDisplay = `${Number(nunique).toLocaleString()} distinct`;
+      if (uRatio !== null && !isNaN(uRatio)) {
+        uniqueDisplay += ` <span style="font-size: 0.78rem; color: var(--text-muted);">(${uRatio}%)</span>`;
+      }
+      if (isTarget) {
+        uniqueDisplay = `<span style="color: var(--color-primary-light); font-weight: 600;">Target (${nunique} classes)</span>`;
+      }
+
+      // 3. Outlier count
+      const dtLower = String(dt).toLowerCase();
+      const isNum = dtLower.includes("int") || dtLower.includes("float") || dtLower.includes("num") || (dq.numeric_features && dq.numeric_features.includes(col));
+      const colOutliers = dq.outliers?.[col] ?? 0;
+      const outlierDetail = dq.outlier_details?.[col];
+      const outlierPct = outlierDetail?.percentage !== undefined ? outlierDetail.percentage : ((colOutliers / totalRows) * 100).toFixed(1);
+
+      let outlierDisplay = `<span style="color: var(--color-success); font-size: 0.84rem;">0 flagged</span>`;
+      if (isNum) {
+        if (colOutliers > 0) {
+          outlierDisplay = `<span style="color: var(--color-warning); font-weight: 600;">${colOutliers.toLocaleString()} flagged</span> <span style="font-size: 0.78rem; color: var(--text-muted);">(${outlierPct}%)</span>`;
+        } else {
+          outlierDisplay = `<span style="color: var(--color-success); font-size: 0.84rem;">0 flagged</span>`;
+        }
+      } else {
+        outlierDisplay = `<span style="color: var(--text-muted); font-size: 0.80rem;">N/A (Categorical)</span>`;
+      }
+
+      // 4. Inferred type badge
+      const isConstant = dq.constant_features?.includes(col);
+      const isNearConstant = dq.near_constant_features?.includes(col);
+      const isIdCandidate = dq.identifier_candidates?.includes(col);
+      const isHighCard = dq.high_cardinality_features?.includes(col);
+      
+      let typeBadgeClass = isNum ? 'col-type-num' : 'col-type-cat';
+      let typeLabel = dt.toUpperCase();
+      if (isIdCandidate) {
+        typeLabel = 'IDENTIFIER';
+        typeBadgeClass = 'col-type-cat';
+      }
+
+      // 5. Intelligent Health Status Badge & Action
+      let healthBadge = `<span class="badge badge-success">HEALTHY</span>`;
+      if (isConstant) {
+        healthBadge = `<span class="badge badge-critical" title="Zero variance column containing only 1 distinct value.">ZERO VARIANCE (DROP)</span>`;
+      } else if (isIdCandidate && !isTarget) {
+        healthBadge = `<span class="badge badge-warning" style="background: rgba(147, 51, 234, 0.15); color: #c084fc; border: 1px solid rgba(147, 51, 234, 0.3);" title="Unique key pattern detected; exclude from features to prevent memorization.">ID CANDIDATE (EXCLUDE)</span>`;
+      } else if (colMissing > 0) {
+        const sevClass = Number(colMissingPct) > 10 ? 'badge-critical' : 'badge-warning';
+        healthBadge = `<span class="badge ${sevClass}" title="Missing ${colMissing} values (${colMissingPct}%). Imputation recommended.">NEEDS IMPUTATION (${colMissingPct}%)</span>`;
+      } else if (colOutliers >= 10 || (Number(outlierPct) > 5.0 && colOutliers > 0)) {
+        healthBadge = `<span class="badge badge-warning" title="${colOutliers} IQR outliers detected. Check robustness or clip extremes.">OUTLIERS FLAGGED (${colOutliers})</span>`;
+      } else if (isHighCard && !isTarget) {
+        healthBadge = `<span class="badge badge-warning" title="High number of distinct categories. Target encoding or grouping recommended.">HIGH CARDINALITY</span>`;
+      } else if (isNearConstant && !isTarget) {
+        healthBadge = `<span class="badge badge-warning" title=">=98% of values are identical. Low predictive variance.">NEAR CONSTANT</span>`;
+      } else if (isTarget) {
+        healthBadge = `<span class="badge badge-primary">TARGET VARIABLE</span>`;
+      }
+
+      const missCellContent = colMissing > 0 
+        ? `<span style="color: var(--color-critical); font-weight: 600;">${colMissing.toLocaleString()} (${colMissingPct}%)</span>` 
+        : `<span style="color: var(--color-success); font-size: 0.84rem;">0 (0.0%)</span>`;
 
       tr.innerHTML = `
-        <td><code>${escapeHtml(col)}</code></td>
-        <td><span class="col-type-badge ${dt === 'numeric' ? 'col-type-num' : 'col-type-cat'}">${dt}</span></td>
-        <td>${colMissing} (0.0%)</td>
-        <td>${col === appState.dataset?.suggested_target ? 'Target variable' : 'Profiled distribution'}</td>
-        <td>0 flagged</td>
-        <td><span class="badge ${isClean ? 'badge-success' : 'badge-warning'}">${isClean ? 'HEALTHY' : 'NEEDS IMPUTATION'}</span></td>
+        <td><code style="font-weight: 600; color: #f1f5f9;">${escapeHtml(col)}</code></td>
+        <td><span class="col-type-badge ${typeBadgeClass}">${escapeHtml(typeLabel)}</span></td>
+        <td>${missCellContent}</td>
+        <td>${uniqueDisplay}</td>
+        <td>${outlierDisplay}</td>
+        <td>${healthBadge}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -1985,29 +2063,69 @@ function renderFallbackFeatureTrials() {
   Plotly.newPlot("plotly-feature-trials", data, layout, { responsive: true, displayModeBar: false });
 }
 
-function renderFallbackMissingChart() {
+function renderFallbackMissingChart(dq) {
+  const dataQuality = dq || appState.analysis?.data_quality || {};
+  const missMap = dataQuality.missing_percentages || {};
+  const cols = appState.dataset?.columns || Object.keys(missMap);
+  const topCols = cols.slice(0, 12);
+  const xVals = topCols.length > 0 ? topCols : ["Feature 1", "Feature 2"];
+  const yVals = topCols.map(c => Number(missMap[c] ?? 0));
+  const textVals = yVals.map(v => `${v.toFixed(1)}%`);
+
   const data = [{
     type: "bar",
-    x: appState.dataset?.columns?.slice(0, 6) || ["Col 1", "Col 2"],
-    y: [0, 0, 0, 0, 0, 0],
-    marker: { color: "#10B981" },
-    text: ["0.0%", "0.0%", "0.0%", "0.0%", "0.0%", "0.0%"],
+    x: xVals,
+    y: yVals,
+    marker: {
+      color: yVals.map(v => v > 10 ? "#EF4444" : (v > 0 ? "#F59E0B" : "#10B981"))
+    },
+    text: textVals,
     textposition: "auto"
   }];
-  const layout = { height: 240, margin: { l: 40, r: 20, t: 20, b: 40 }, paper_bgcolor: "rgba(0,0,0,0)", yaxis: { range: [0, 10], title: "Missing (%)" } };
+  const maxPct = Math.max(10, ...yVals);
+  const layout = {
+    height: 240,
+    margin: { l: 40, r: 20, t: 20, b: 40 },
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: { color: "#94A3B8" },
+    xaxis: { gridcolor: "rgba(255,255,255,0.05)" },
+    yaxis: { range: [0, maxPct * 1.25], title: "Missing (%)", gridcolor: "rgba(255,255,255,0.05)" }
+  };
   Plotly.newPlot("plotly-missing-values", data, layout, { responsive: true, displayModeBar: false });
 }
 
-function renderFallbackOutlierChart() {
+function renderFallbackOutlierChart(dq) {
+  const dataQuality = dq || appState.analysis?.data_quality || {};
+  const outlierMap = dataQuality.outliers || {};
+  const numCols = dataQuality.numeric_features && dataQuality.numeric_features.length > 0 
+    ? dataQuality.numeric_features 
+    : (appState.dataset?.columns || Object.keys(outlierMap));
+  const topCols = numCols.slice(0, 12);
+  const xVals = topCols.length > 0 ? topCols : ["Feature 1", "Feature 2"];
+  const yVals = topCols.map(c => Number(outlierMap[c] ?? 0));
+  const textVals = yVals.map(v => `${v.toLocaleString()}`);
+
   const data = [{
     type: "bar",
-    x: appState.dataset?.columns?.slice(0, 6) || ["Col 1", "Col 2"],
-    y: [4, 12, 0, 2, 8, 1],
-    marker: { color: "#F59E0B" },
-    text: ["4", "12", "0", "2", "8", "1"],
+    x: xVals,
+    y: yVals,
+    marker: {
+      color: yVals.map(v => v > 10 ? "#EF4444" : (v > 0 ? "#F59E0B" : "#10B981"))
+    },
+    text: textVals,
     textposition: "auto"
   }];
-  const layout = { height: 240, margin: { l: 40, r: 20, t: 20, b: 40 }, paper_bgcolor: "rgba(0,0,0,0)", yaxis: { title: "Outlier Count" } };
+  const maxCount = Math.max(5, ...yVals);
+  const layout = {
+    height: 240,
+    margin: { l: 40, r: 20, t: 20, b: 40 },
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: { color: "#94A3B8" },
+    xaxis: { gridcolor: "rgba(255,255,255,0.05)" },
+    yaxis: { range: [0, maxCount * 1.25], title: "Outlier Count (IQR)", gridcolor: "rgba(255,255,255,0.05)" }
+  };
   Plotly.newPlot("plotly-outliers", data, layout, { responsive: true, displayModeBar: false });
 }
 
