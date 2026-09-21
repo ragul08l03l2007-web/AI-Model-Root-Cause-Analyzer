@@ -378,27 +378,34 @@ async function handleFileSelected(file) {
   }
 }
 
-window.loadSampleDataset = async function(type) {
-  showLoading("Loading Demo Benchmark...", `Initializing ${type === 'regression' ? 'Property Valuation (Regression)' : 'Credit Risk (Classification)'} dataset...`);
+window.loadSampleDataset = async function(type, autoRun = true) {
+  showLoading("Loading Demo Benchmark...", `Initializing ${type === 'regression' ? 'Continuous Regression Benchmark' : 'Credit Risk & Churn (Classification)'} dataset...`);
 
   document.getElementById("btn-scenario-clf")?.classList.toggle("active", type === "classification");
   document.getElementById("btn-scenario-reg")?.classList.toggle("active", type === "regression");
 
+  let summary = null;
   try {
     const res = await fetch(`/api/sample?type=${type}`, { method: "GET" });
     if (res.ok) {
-      const summary = await res.json();
-      hideLoading();
-      onDatasetLoaded(summary);
-      return;
+      summary = await res.json();
     }
   } catch (err) {
     console.log("[i] Backend sample API unavailable, using embedded demo data.");
   }
 
+  if (!summary) {
+    summary = getEmbeddedSampleDataset(type);
+  }
+
   hideLoading();
-  const summary = getEmbeddedSampleDataset(type);
   onDatasetLoaded(summary);
+
+  if (autoRun) {
+    setTimeout(() => {
+      window.executeAnalysis();
+    }, 100);
+  }
 };
 
 function onDatasetLoaded(summary) {
