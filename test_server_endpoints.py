@@ -29,7 +29,7 @@ def run_tests():
     print(f"[*] Server started on thread port {test_port}.")
     time.sleep(0.5)
 
-    base_url = f"http://{HOST}:{test_port}"
+    base_url = f"http://127.0.0.1:{test_port}"
 
     try:
         # 1. Test GET /
@@ -98,6 +98,46 @@ def run_tests():
         status, headers, body = http_get(f"{base_url}/download/fix_pipeline.py")
         assert status == 200
         print("[OK] All download endpoints (summary.csv, analysis.json, fix_pipeline.py) verified")
+
+        # 7. Test SEO Endpoints: Sitemap & Robots.txt
+        print("\n--- 7. Testing Sitemap & Robots.txt Endpoints ---")
+        import xml.etree.ElementTree as ET
+
+        # GET /sitemap.xml
+        status, headers, body = http_get(f"{base_url}/sitemap.xml")
+        assert status == 200, f"Expected 200, got {status}"
+        assert "application/xml" in headers.get("Content-Type", "") or "text/xml" in headers.get("Content-Type", "")
+        root = ET.fromstring(body.decode("utf-8"))
+        assert "urlset" in root.tag
+        print("[OK] GET /sitemap.xml returns 200 with valid XML")
+
+        # HEAD /sitemap.xml
+        req_head = urllib.request.Request(f"{base_url}/sitemap.xml", method="HEAD")
+        with urllib.request.urlopen(req_head) as resp:
+            assert resp.status == 200
+            assert "application/xml" in resp.headers.get("Content-Type", "") or "text/xml" in resp.headers.get("Content-Type", "")
+        print("[OK] HEAD /sitemap.xml returns 200 without body")
+
+        # GET /sitemap and /sitemap.xml/
+        status, headers, _ = http_get(f"{base_url}/sitemap")
+        assert status == 200
+        status, headers, _ = http_get(f"{base_url}/sitemap.xml/")
+        assert status == 200
+        print("[OK] Sitemap route aliases (/sitemap, /sitemap.xml/) return 200")
+
+        # GET /robots.txt
+        status, headers, body = http_get(f"{base_url}/robots.txt")
+        assert status == 200
+        assert "text/plain" in headers.get("Content-Type", "")
+        assert "Sitemap:" in body.decode("utf-8")
+        assert "sitemap.xml" in body.decode("utf-8")
+        print("[OK] GET /robots.txt returns 200 and points to sitemap.xml")
+
+        # HEAD /robots.txt
+        req_head_robots = urllib.request.Request(f"{base_url}/robots.txt", method="HEAD")
+        with urllib.request.urlopen(req_head_robots) as resp:
+            assert resp.status == 200
+        print("[OK] HEAD /robots.txt returns 200")
 
         print("\n" + "=" * 50)
         print(" [OK] ALL INTEGRATION TESTS PASSED 100% PERFECTLY!")

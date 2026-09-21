@@ -22,6 +22,7 @@ from analysis.ai_explainer import AIExplainer
 from analysis.visualization import generate_all_visualizations
 from analysis.evidence import safe_primitive
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", 8000))
 
@@ -201,11 +202,15 @@ class AppHandler(BaseHTTPRequestHandler):
 
     def send_file_response(self, filepath: str, content_type: str):
         """Helper to serve static files."""
-        if os.path.exists(filepath):
-            with open(filepath, "rb") as f:
+        resolved_path = filepath if os.path.isabs(filepath) else os.path.join(BASE_DIR, filepath)
+        if not os.path.exists(resolved_path) and os.path.exists(filepath):
+            resolved_path = filepath
+        if os.path.exists(resolved_path):
+            with open(resolved_path, "rb") as f:
                 content = f.read()
             self.send_response(200)
             self.send_header("Content-Type", content_type)
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Content-Length", str(len(content)))
             self.end_headers()
             self.wfile.write(content)
@@ -225,8 +230,77 @@ class AppHandler(BaseHTTPRequestHandler):
         """Handle CORS pre-flight."""
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    # ========================================================
+    # HEAD ENDPOINTS
+    # ========================================================
+
+    def do_HEAD(self):
+        """Handle HEAD requests cleanly for search engine crawlers and health checkers."""
+        parsed_url = urllib.parse.urlparse(self.path)
+        path = parsed_url.path
+        path_lower = path.lower().rstrip("/")
+
+        # 1. Sitemap HEAD
+        if path_lower in {"/sitemap.xml", "/sitemap", "/sitemaps.xml", "/sitemap_index.xml"}:
+            sitemap_path = os.path.join(BASE_DIR, "sitemap.xml")
+            if os.path.exists(sitemap_path):
+                try:
+                    with open(sitemap_path, "rb") as f:
+                        content_len = len(f.read())
+                except Exception:
+                    content_len = 291
+            else:
+                content_len = 291
+            self.send_response(200)
+            self.send_header("Content-Type", "application/xml; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "public, max-age=3600")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Length", str(content_len))
+            self.end_headers()
+            return
+
+        # 2. Robots.txt HEAD
+        if path_lower == "/robots.txt":
+            robots_path = os.path.join(BASE_DIR, "robots.txt")
+            if os.path.exists(robots_path):
+                try:
+                    with open(robots_path, "rb") as f:
+                        content_len = len(f.read())
+                except Exception:
+                    content_len = 95
+            else:
+                content_len = 95
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "public, max-age=3600")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Length", str(content_len))
+            self.end_headers()
+            return
+
+        # 3. Static Web App Files HEAD
+        if path in {"/", "/index.html"}:
+            index_path = os.path.join(BASE_DIR, "index.html")
+            content_len = os.path.getsize(index_path) if os.path.exists(index_path) else 0
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(content_len))
+            self.end_headers()
+            return
+
+        if path in {"/healthz", "/api/health", "/health"}:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            return
+
+        self.send_response(200)
         self.end_headers()
 
     # ========================================================
@@ -240,8 +314,9 @@ class AppHandler(BaseHTTPRequestHandler):
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
         query = urllib.parse.parse_qs(parsed_url.query)
+        path_lower = path.lower().rstrip("/")
 
-        # 1. Static Web App Files
+        # 1. Static Web App Files & SEO routes
         if path in {"/", "/index.html"}:
             self.send_file_response("index.html", "text/html; charset=utf-8")
             return
@@ -254,20 +329,66 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_file_response("app.js", "application/javascript; charset=utf-8")
             return
 
-        if path == "/robots.txt":
-            if os.path.exists("robots.txt"):
-                self.send_file_response("robots.txt", "text/plain; charset=utf-8")
+        if path_lower == "/robots.txt":
+            robots_path = os.path.join(BASE_DIR, "robots.txt")
+            if os.path.exists(robots_path):
+                try:
+                    with open(robots_path, "rb") as f:
+                        robots_content = f.read()
+                except Exception:
+                    robots_content = b"User-agent: *\nAllow: /\n\nSitemap: https://ai-model-root-cause-analyzer.onrender.com/sitemap.xml\n"
             else:
-                robots_content = "User-agent: *\nAllow: /\n\nSitemap: https://ai-model-root-cause-analyzer.onrender.com/sitemap.xml\n".encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "text/plain; charset=utf-8")
-                self.send_header("Content-Length", str(len(robots_content)))
-                self.end_headers()
-                self.wfile.write(robots_content)
+                robots_content = b"User-agent: *\nAllow: /\n\nSitemap: https://ai-model-root-cause-analyzer.onrender.com/sitemap.xml\n"
+
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "public, max-age=3600")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Length", str(len(robots_content)))
+            self.end_headers()
+            self.wfile.write(robots_content)
             return
 
-        if path == "/sitemap.xml":
-            self.send_file_response("sitemap.xml", "application/xml; charset=utf-8")
+        if path_lower in {"/sitemap.xml", "/sitemap", "/sitemaps.xml", "/sitemap_index.xml"}:
+            sitemap_path = os.path.join(BASE_DIR, "sitemap.xml")
+            if os.path.exists(sitemap_path):
+                try:
+                    with open(sitemap_path, "rb") as f:
+                        sitemap_content = f.read()
+                except Exception:
+                    sitemap_content = (
+                        '<?xml version="1.0" encoding="UTF-8"?>\n'
+                        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+                        '  <url>\n'
+                        '    <loc>https://ai-model-root-cause-analyzer.onrender.com/</loc>\n'
+                        '    <lastmod>2026-09-19</lastmod>\n'
+                        '    <changefreq>daily</changefreq>\n'
+                        '    <priority>1.0</priority>\n'
+                        '  </url>\n'
+                        '</urlset>\n'
+                    ).encode("utf-8")
+            else:
+                sitemap_content = (
+                    '<?xml version="1.0" encoding="UTF-8"?>\n'
+                    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+                    '  <url>\n'
+                    '    <loc>https://ai-model-root-cause-analyzer.onrender.com/</loc>\n'
+                    '    <lastmod>2026-09-19</lastmod>\n'
+                    '    <changefreq>daily</changefreq>\n'
+                    '    <priority>1.0</priority>\n'
+                    '  </url>\n'
+                    '</urlset>\n'
+                ).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/xml; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "public, max-age=3600")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Length", str(len(sitemap_content)))
+            self.end_headers()
+            self.wfile.write(sitemap_content)
             return
 
         if path in {"/manifest.json", "/site.webmanifest"}:
