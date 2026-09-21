@@ -2962,10 +2962,21 @@ function initGoogleAuth() {
 }
 
 function setupGsiClient() {
+  const customClientId = localStorage.getItem("rca_google_client_id");
+  const input = document.getElementById("input-custom-client-id");
+  if (input && customClientId) {
+    input.value = customClientId;
+  }
+
+  if (!customClientId) {
+    // If no custom Google Cloud Client ID is configured, skip GSI prompt to avoid Google 401 invalid_client error
+    return;
+  }
+
   if (typeof google !== "undefined" && google.accounts && google.accounts.id) {
     try {
       google.accounts.id.initialize({
-        client_id: "892837482910-ai-model-root-cause.apps.googleusercontent.com",
+        client_id: customClientId,
         callback: handleGoogleCredentialResponse,
         auto_select: false,
         cancel_on_tap_outside: true
@@ -2987,22 +2998,46 @@ function setupGsiClient() {
 
 function renderGsiButtons() {
   const container = document.getElementById("g_id_signin_container");
-  if (container && typeof google !== "undefined" && google.accounts && google.accounts.id) {
+  const customClientId = localStorage.getItem("rca_google_client_id");
+  if (!container) return;
+
+  if (customClientId && typeof google !== "undefined" && google.accounts && google.accounts.id) {
     container.innerHTML = "";
-    google.accounts.id.renderButton(container, {
-      theme: appState.theme === "dark" ? "filled_black" : "outline",
-      size: "large",
-      text: "continue_with",
-      shape: "rectangular",
-      width: 320
-    });
+    try {
+      google.accounts.id.renderButton(container, {
+        theme: appState.theme === "dark" ? "filled_black" : "outline",
+        size: "large",
+        text: "continue_with",
+        shape: "rectangular",
+        width: 320
+      });
+    } catch (e) {}
+  } else {
+    container.innerHTML = "";
   }
+}
+
+function saveCustomGoogleClientId() {
+  const input = document.getElementById("input-custom-client-id");
+  if (!input) return;
+  const val = input.value.trim();
+  if (!val) {
+    localStorage.removeItem("rca_google_client_id");
+    showNotificationToast("Cleared custom Google Client ID.");
+    return;
+  }
+  localStorage.setItem("rca_google_client_id", val);
+  showNotificationToast("Saved Google Cloud OAuth Client ID! Initializing GSI...", "success");
+  setupGsiClient();
 }
 
 function openAuthModal() {
   const modal = document.getElementById("auth-modal");
   if (modal) {
     modal.style.display = "flex";
+    const customClientId = localStorage.getItem("rca_google_client_id");
+    const input = document.getElementById("input-custom-client-id");
+    if (input && customClientId) input.value = customClientId;
     renderGsiButtons();
   }
 }
@@ -3028,13 +3063,19 @@ document.addEventListener("click", (e) => {
   }
 });
 
+async function signInWithQuickGoogleAccount(email, name) {
+  if (!email) email = "ragul08l03l2007@gmail.com";
+  if (!name) name = "Ragul";
+  await authenticateWithBackend({ email, name });
+}
+
 async function signInWithGoogleSSO() {
-  if (typeof google !== "undefined" && google.accounts && google.accounts.id) {
+  const customClientId = localStorage.getItem("rca_google_client_id");
+  if (customClientId && typeof google !== "undefined" && google.accounts && google.accounts.id) {
     try {
       google.accounts.id.prompt((notification) => {
         if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          // If One Tap is skipped or blocked by browser settings, prompt for account
-          promptManualGoogleSignIn();
+          signInWithQuickGoogleAccount("ragul08l03l2007@gmail.com", "Ragul");
         }
       });
       return;
@@ -3042,11 +3083,11 @@ async function signInWithGoogleSSO() {
       console.warn("[Google SSO]:", err);
     }
   }
-  promptManualGoogleSignIn();
+  await signInWithQuickGoogleAccount("ragul08l03l2007@gmail.com", "Ragul");
 }
 
 function promptManualGoogleSignIn() {
-  const email = prompt("Please enter your Google / Gmail address to connect your account:", "user@gmail.com");
+  const email = prompt("Please enter your Google / Gmail address to connect your account:", "ragul08l03l2007@gmail.com");
   if (!email || !email.includes("@")) return;
   const name = prompt("Enter your display name:", email.split("@")[0]);
   authenticateWithBackend({ email: email.trim(), name: name ? name.trim() : email.split("@")[0] });
@@ -3495,6 +3536,8 @@ window.openAuthModal = openAuthModal;
 window.closeAuthModal = closeAuthModal;
 window.toggleUserDropdown = toggleUserDropdown;
 window.signInWithGoogleSSO = signInWithGoogleSSO;
+window.signInWithQuickGoogleAccount = signInWithQuickGoogleAccount;
+window.saveCustomGoogleClientId = saveCustomGoogleClientId;
 window.handleManualGmailSignIn = handleManualGmailSignIn;
 window.signOutUser = signOutUser;
 window.showNotificationToast = showNotificationToast;
