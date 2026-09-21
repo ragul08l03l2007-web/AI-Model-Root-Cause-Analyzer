@@ -42,6 +42,9 @@
 
   <!-- Modern App Stylesheet -->
   <link rel="stylesheet" href="styles.css">
+  <!-- KaTeX for Rich Mathematical Formula & Proof Rendering -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <!-- Plotly.js Interactive Visualization Engine -->
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <!-- PapaParse for Client-Side Fallback CSV Parsing -->
@@ -139,6 +142,11 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
         </svg>
+      </button>
+
+      <!-- Math Derivations & Calculations Button -->
+      <button id="btn-header-derivations" class="btn btn-outline btn-sm" onclick="openDerivationModal('risk_score')" title="View mathematical formulas and calculation breakdown" style="display: flex; align-items: center; gap: 6px;">
+        <span>📐 Math &amp; Formulas</span>
       </button>
 
       <!-- Action Button -->
@@ -426,7 +434,10 @@
           <div class="chart-card">
             <div class="chart-header">
               <span class="chart-title">Radial Risk Severity Gauge (0–100)</span>
-              <span class="badge badge-primary">Plotly Gauge</span>
+              <div style="display: flex; gap: 6px; align-items: center;">
+                <button class="btn-derivation-trigger" onclick="openDerivationModal('risk_score')" title="View Risk Score mathematical formula">📐 Derivation</button>
+                <span class="badge badge-primary">Plotly Gauge</span>
+              </div>
             </div>
             <div id="plotly-risk-gauge" class="plotly-container" style="min-height: 260px;"></div>
           </div>
@@ -434,7 +445,10 @@
           <div class="chart-card">
             <div class="chart-header">
               <span class="chart-title">Risk Points Contribution by Domain</span>
-              <span class="badge badge-primary">Plotly Bar</span>
+              <div style="display: flex; gap: 6px; align-items: center;">
+                <button class="btn-derivation-trigger" onclick="openDerivationModal('risk_score')" title="View Risk Score multi-tier breakdown">📐 Formula</button>
+                <span class="badge badge-primary">Plotly Bar</span>
+              </div>
             </div>
             <div id="plotly-risk-breakdown" class="plotly-container" style="min-height: 260px;"></div>
           </div>
@@ -524,7 +538,10 @@
           <div class="chart-card">
             <div class="chart-header">
               <span class="chart-title">Evaluated Model Performance Metrics</span>
-              <span class="badge badge-primary">Plotly Bar</span>
+              <div style="display: flex; gap: 6px; align-items: center;">
+                <button class="btn-derivation-trigger" onclick="openDerivationModal('model_performance')" title="View mathematical equations for accuracy, F1, precision, recall, R2, RMSE">📐 Math</button>
+                <span class="badge badge-primary">Plotly Bar</span>
+              </div>
             </div>
             <div id="plotly-performance-metrics" class="plotly-container" style="min-height: 280px;"></div>
           </div>
@@ -532,7 +549,10 @@
           <div class="chart-card">
             <div class="chart-header">
               <span class="chart-title">5-Fold Cross-Validation Score Stability</span>
-              <span class="badge badge-primary">Plotly Stability</span>
+              <div style="display: flex; gap: 6px; align-items: center;">
+                <button class="btn-derivation-trigger" onclick="openDerivationModal('cross_validation')" title="View sample mean, variance, and stability derivation">📐 Derivation</button>
+                <span class="badge badge-primary">Plotly Stability</span>
+              </div>
             </div>
             <div id="plotly-cv-stability" class="plotly-container" style="min-height: 280px;"></div>
           </div>
@@ -650,7 +670,10 @@
           <div class="chart-card">
             <div class="chart-header">
               <span class="chart-title" id="chart-error-main-title">Confusion Matrix Heatmap</span>
-              <span class="badge badge-primary">Plotly Heatmap</span>
+              <div style="display: flex; gap: 6px; align-items: center;">
+                <button class="btn-derivation-trigger" onclick="openDerivationModal('error_analysis')" title="View error and residual mathematical derivations">📐 Math</button>
+                <span class="badge badge-primary">Plotly Heatmap</span>
+              </div>
             </div>
             <div id="plotly-confusion-matrix" class="plotly-container" style="min-height: 300px;"></div>
           </div>
@@ -750,7 +773,10 @@
           <div class="chart-card">
             <div class="chart-header">
               <span class="chart-title">Feature Importance Ranking</span>
-              <span class="badge badge-primary">Relative Gain Share</span>
+              <div style="display: flex; gap: 6px; align-items: center;">
+                <button class="btn-derivation-trigger" onclick="openDerivationModal('features')" title="View feature importance, correlation, and attribution formulas">📐 Formulas</button>
+                <span class="badge badge-primary">Relative Gain Share</span>
+              </div>
             </div>
             <div id="plotly-feature-importance" class="plotly-container" style="min-height: 300px;"></div>
           </div>
@@ -881,7 +907,10 @@
           <div class="chart-card">
             <div class="chart-header">
               <span class="chart-title">Outlier Frequency by Continuous Feature</span>
-              <span class="badge badge-primary">Plotly Bar</span>
+              <div style="display: flex; gap: 6px; align-items: center;">
+                <button class="btn-derivation-trigger" onclick="openDerivationModal('data_quality')" title="View Tukey 1.5x IQR outlier fence formulas">📐 IQR Math</button>
+                <span class="badge badge-primary">Plotly Bar</span>
+              </div>
             </div>
             <div id="plotly-outliers" class="plotly-container" style="min-height: 260px;"></div>
           </div>
@@ -1333,6 +1362,44 @@
           </div>
           <div>All datasets, trained model tournaments, evidence graphs, and AI diagnostic reports generated in this session are securely saved to your account.</div>
         </div>
+      </div>
+    </div>
+  <!-- Mathematical Derivation & Calculation Inspector Modal -->
+  <div id="derivation-modal" class="modal-overlay" style="display: none;" onclick="if(event.target === this) closeDerivationModal()">
+    <div class="modal-card" style="max-width: 820px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-header" style="padding: 16px 24px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--bg-surface);">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 38px; height: 38px; border-radius: 8px; background: rgba(99, 102, 241, 0.12); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 1.3rem;">
+            📐
+          </div>
+          <div>
+            <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700;" id="derivation-modal-title">Mathematical Derivation &amp; Calculation Breakdown</h3>
+            <span style="font-size: 0.76rem; color: var(--text-muted);" id="derivation-modal-subtitle">Formal formulas, step-by-step arithmetic, and substituted active dataset values</span>
+          </div>
+        </div>
+        <button class="btn-icon" onclick="closeDerivationModal()" style="background:none; border:none; font-size: 1.25rem; cursor: pointer; color: var(--text-muted);" title="Close">✕</button>
+      </div>
+
+      <!-- Quick Category Nav Tabs inside Modal -->
+      <div class="derivation-modal-tabs" id="derivation-quick-tabs">
+        <button class="derivation-tab-btn active" data-metric="risk_score" onclick="switchDerivationCategory('risk_score')">🎯 Risk Score</button>
+        <button class="derivation-tab-btn" data-metric="target_profile" onclick="switchDerivationCategory('target_profile')">⚖️ Target Imbalance</button>
+        <button class="derivation-tab-btn" data-metric="model_performance" onclick="switchDerivationCategory('model_performance')">📈 Performance Metrics</button>
+        <button class="derivation-tab-btn" data-metric="generalization" onclick="switchDerivationCategory('generalization')">🧪 Generalization Gap</button>
+        <button class="derivation-tab-btn" data-metric="cross_validation" onclick="switchDerivationCategory('cross_validation')">📊 CV Stability</button>
+        <button class="derivation-tab-btn" data-metric="features" onclick="switchDerivationCategory('features')">⚡ Feature Attribution</button>
+        <button class="derivation-tab-btn" data-metric="data_quality" onclick="switchDerivationCategory('data_quality')">🧹 Data Quality (IQR)</button>
+        <button class="derivation-tab-btn" data-metric="confidence_score" onclick="switchDerivationCategory('confidence_score')">🔍 Confidence Engine</button>
+        <button class="derivation-tab-btn" data-metric="error_analysis" onclick="switchDerivationCategory('error_analysis')">🎯 Error Analysis</button>
+      </div>
+
+      <div class="modal-body" id="derivation-modal-body" style="padding: 20px 24px; overflow-y: auto; flex: 1;">
+        <!-- Dynamically rendered via app.js -->
+      </div>
+
+      <div class="modal-footer" style="padding: 12px 24px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--bg-surface);">
+        <span style="font-size: 0.76rem; color: var(--text-muted);">Deterministic mathematical proofs computed directly from active dataset observations</span>
+        <button class="btn btn-outline btn-sm" onclick="closeDerivationModal()">Close Inspector</button>
       </div>
     </div>
   </div>

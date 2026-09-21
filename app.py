@@ -716,17 +716,19 @@ class AppHandler(BaseHTTPRequestHandler):
 # ============================================================
 
 if __name__ == "__main__":
+    display_host = "localhost" if HOST == "0.0.0.0" else HOST
     print("=" * 65)
     print("       AI MODEL ROOT-CAUSE ANALYZER & DIAGNOSTICS")
     print("=" * 65)
     print()
-    print(f"Server URL: http://{HOST}:{PORT}")
+    print(f"Server URL: http://{display_host}:{PORT}")
+    print(f"Local URL:  http://127.0.0.1:{PORT}")
     print()
     print("Endpoints:")
-    print(f"  • Web App Dashboard: http://{HOST}:{PORT}/")
-    print(f"  • Ingest / Upload:   POST http://{HOST}:{PORT}/api/upload")
-    print(f"  • Run Diagnostics:   POST http://{HOST}:{PORT}/api/analyze")
-    print(f"  • Demo Datasets:     GET  http://{HOST}:{PORT}/api/sample?type=classification|regression")
+    print(f"  • Web App Dashboard: http://{display_host}:{PORT}/")
+    print(f"  • Ingest / Upload:   POST http://{display_host}:{PORT}/api/upload")
+    print(f"  • Run Diagnostics:   POST http://{display_host}:{PORT}/api/analyze")
+    print(f"  • Demo Datasets:     GET  http://{display_host}:{PORT}/api/sample?type=classification|regression")
     print()
     print("Press CTRL+C to stop the server.")
     print()

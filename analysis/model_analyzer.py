@@ -29,6 +29,7 @@ from analysis.diagnostic_engine import (
     RecommendationEngine,
 )
 from analysis.verification_engine import VerificationEngine
+from analysis.derivations import DerivationEngine
 
 
 
@@ -718,5 +719,11 @@ def analyze_model(
             "Confidence intervals widen on smaller sample counts."
         ],
     }
+
+    try:
+        derivations_dict = DerivationEngine.generate_all_derivations(result_payload, data_quality)
+        result_payload["derivations"] = derivations_dict
+    except Exception as d_exc:
+        result_payload["derivations"] = {"error": str(d_exc)}
 
     return safe_primitive(result_payload)
