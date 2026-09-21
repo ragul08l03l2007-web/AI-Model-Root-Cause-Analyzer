@@ -2161,15 +2161,7 @@ function getEmbeddedSampleDataset(type) {
 // GOOGLE AUTHENTICATION & WORKSPACE OWNERSHIP SYSTEM
 // ==========================================================================
 
-const DEFAULT_OWNER_USER = {
-  uid: "usr_ragul_08l03l2007",
-  displayName: "Ragul",
-  email: "ragul08l03l2007@gmail.com",
-  photoURL: null,
-  isOwner: true,
-  role: "Workspace Owner & Lead ML Engineer",
-  loginTime: new Date().toISOString()
-};
+const PLATFORM_ADMIN_EMAIL = "ragul08l03l2007@gmail.com";
 
 let currentUser = null;
 
@@ -2179,12 +2171,10 @@ function initGoogleAuth() {
     try {
       currentUser = JSON.parse(savedUser);
     } catch (e) {
-      currentUser = DEFAULT_OWNER_USER;
+      currentUser = null;
     }
   } else {
-    // Default to active verified workspace owner
-    currentUser = DEFAULT_OWNER_USER;
-    localStorage.setItem("rca_auth_user", JSON.stringify(currentUser));
+    currentUser = null;
   }
   updateAuthUI();
 

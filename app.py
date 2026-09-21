@@ -254,6 +254,26 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_file_response("app.js", "application/javascript; charset=utf-8")
             return
 
+        if path == "/robots.txt":
+            if os.path.exists("robots.txt"):
+                self.send_file_response("robots.txt", "text/plain; charset=utf-8")
+            else:
+                robots_content = "User-agent: *\nAllow: /\n\nSitemap: https://ai-model-root-cause-analyzer.onrender.com/sitemap.xml\n".encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(robots_content)))
+                self.end_headers()
+                self.wfile.write(robots_content)
+            return
+
+        if path == "/sitemap.xml":
+            self.send_file_response("sitemap.xml", "application/xml; charset=utf-8")
+            return
+
+        if path in {"/manifest.json", "/site.webmanifest"}:
+            self.send_file_response("manifest.json", "application/manifest+json; charset=utf-8")
+            return
+
         # Health check endpoint for cloud load balancers & Render
         if path in {"/healthz", "/api/health", "/health"}:
             self.send_json({"status": "ok", "service": "AI-Model-Root-Cause-Analyzer"})
