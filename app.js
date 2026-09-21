@@ -3235,6 +3235,10 @@ async function fetchUserSavedSessions() {
       if (countBadge) {
         countBadge.textContent = `${appState.userSessions.length} Saved Session${appState.userSessions.length === 1 ? '' : 's'}`;
       }
+      const sessionCountEl = document.getElementById("user-session-count");
+      if (sessionCountEl) {
+        sessionCountEl.textContent = `${appState.userSessions.length} session${appState.userSessions.length === 1 ? '' : 's'}`;
+      }
       renderSavedSessionsVault();
     }
   } catch (err) {
