@@ -72,6 +72,7 @@
       <button class="nav-tab-btn" data-tab="data-quality" onclick="switchTab('data-quality')">🧹 Data Quality</button>
       <button class="nav-tab-btn" data-tab="evidence-dag" onclick="switchTab('evidence-dag')">🕸️ Evidence Graph</button>
       <button class="nav-tab-btn" data-tab="ai-explainer" onclick="switchTab('ai-explainer')">🤖 AI Explainer</button>
+      <button class="nav-tab-btn" data-tab="math-derivations" onclick="switchTab('math-derivations')">📐 Math &amp; Proofs</button>
     </nav>
 
     <!-- Header Actions -->
@@ -1222,11 +1223,73 @@
           <button class="btn btn-outline nav-prev-btn" onclick="switchTab('evidence-dag')">
             <span>← Previous: Evidence Graph DAG</span>
           </button>
-          <span style="font-size: 0.85rem; color: var(--text-muted);">Step 8 of 8: AI Explainer &amp; Remediation</span>
-          <button class="btn btn-primary" onclick="switchTab('dashboard')" style="font-weight: 600;">
-            <span>📊 Return to Step 2 Dashboard →</span>
+          <span style="font-size: 0.85rem; color: var(--text-muted);">Step 8 of 9: AI Explainer &amp; Remediation</span>
+          <button class="btn btn-primary nav-next-btn" onclick="switchTab('math-derivations')" style="font-weight: 600;">
+            <span>Next: Mathematical Proofs &amp; Derivations →</span>
           </button>
         </div>
+      </div>
+    </div>
+
+
+    <!-- ====================================================================
+         TAB 9: MATHEMATICAL PROOFS, DERIVATIONS & CALCULATION ENGINE
+         ==================================================================== -->
+    <div id="tab-math-derivations" class="tab-view">
+      <div class="section-header" style="margin-bottom: 16px;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+            <span style="font-size: 1.4rem;">📐</span>
+            <h2 class="section-title" style="margin: 0;">Mathematical Proofs &amp; Calculation Engine</h2>
+            <span class="badge badge-success">Deterministic Derivations</span>
+          </div>
+          <p class="section-desc">
+            Formal equations, variable definitions, substituted active dataset values, and step-by-step arithmetic traces for every output and metric.
+          </p>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="btn btn-outline btn-sm" onclick="downloadMathAuditReport()" title="Download complete calculation proofs as Markdown">
+            <span>📥 Export Math Audit</span>
+          </button>
+          <button class="btn btn-primary btn-sm" onclick="switchTab('dashboard')">
+            <span>📊 Back to Dashboard →</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Category Filter Pills Bar -->
+      <div class="card" style="padding: 12px 16px; margin-bottom: 20px; background: var(--bg-surface);">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <span style="font-size: 0.84rem; font-weight: 700; color: var(--text-main);">Select Subsystem to Inspect:</span>
+          <div class="derivation-modal-tabs" id="page-math-tabs" style="padding: 0; background: none; border: none; flex-wrap: wrap;">
+            <button class="derivation-tab-btn active" data-metric="risk_score" onclick="switchMathPageCategory('risk_score')">🎯 Risk Score</button>
+            <button class="derivation-tab-btn" data-metric="target_profile" onclick="switchMathPageCategory('target_profile')">⚖️ Target Imbalance</button>
+            <button class="derivation-tab-btn" data-metric="model_performance" onclick="switchMathPageCategory('model_performance')">📈 Performance Metrics</button>
+            <button class="derivation-tab-btn" data-metric="generalization" onclick="switchMathPageCategory('generalization')">🧪 Generalization Gap</button>
+            <button class="derivation-tab-btn" data-metric="cross_validation" onclick="switchMathPageCategory('cross_validation')">📊 CV Stability</button>
+            <button class="derivation-tab-btn" data-metric="features" onclick="switchMathPageCategory('features')">⚡ Feature Attribution</button>
+            <button class="derivation-tab-btn" data-metric="data_quality" onclick="switchMathPageCategory('data_quality')">🧹 Data Quality (IQR)</button>
+            <button class="derivation-tab-btn" data-metric="confidence_score" onclick="switchMathPageCategory('confidence_score')">🔍 Confidence Engine</button>
+            <button class="derivation-tab-btn" data-metric="error_analysis" onclick="switchMathPageCategory('error_analysis')">🎯 Error Analysis</button>
+            <button class="derivation-tab-btn" data-metric="all" onclick="switchMathPageCategory('all')" style="background: rgba(59, 130, 246, 0.15); color: var(--primary); font-weight: 700;">📑 View All 9 Proofs</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Math Page Dynamic Body -->
+      <div id="math-page-content" style="display: flex; flex-direction: column; gap: 20px;">
+        <!-- Populated dynamically via app.js -->
+      </div>
+
+      <!-- Page Navigation Footer -->
+      <div class="page-nav-footer" style="margin-top: 24px;">
+        <button class="btn btn-outline nav-prev-btn" onclick="switchTab('ai-explainer')">
+          <span>← Previous: AI Explainer</span>
+        </button>
+        <span style="font-size: 0.85rem; color: var(--text-muted);">Step 9 of 9: Mathematical Proofs</span>
+        <button class="btn btn-primary" onclick="switchTab('dashboard')" style="font-weight: 600;">
+          <span>📊 Return to Dashboard →</span>
+        </button>
       </div>
     </div>
 

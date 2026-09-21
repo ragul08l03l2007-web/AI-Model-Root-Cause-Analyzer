@@ -46,7 +46,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Restore initial tab from URL hash if available
   if (window.location.hash) {
     const initialTab = window.location.hash.replace("#", "");
-    const validTabs = ["dataset", "dashboard", "performance", "errors", "features", "data-quality", "evidence-dag", "ai-explainer"];
+    const validTabs = ["dataset", "dashboard", "performance", "errors", "features", "data-quality", "evidence-dag", "ai-explainer", "math-derivations"];
     if (validTabs.includes(initialTab)) {
       switchTab(initialTab, false);
     }
@@ -199,6 +199,11 @@ window.switchTab = function(tabId, pushToHistory = true) {
 
   // Persist current active tab
   saveSessionState();
+
+  // If switching to Math & Proofs tab, render the page
+  if (tabId === "math-derivations") {
+    renderMathDerivationsPage(currentMathPageCategory || "risk_score");
+  }
 
   // Update floating copilot context & prompts
   if (typeof updateDrawerContext === "function") {
@@ -2381,14 +2386,12 @@ function openDerivationModal(category = "risk_score", subKey = null) {
 
   renderDerivationsContent();
   modal.style.display = "flex";
-  document.body.style.overflow = "hidden"; // Prevent background scrolling
 }
 
 function closeDerivationModal() {
   const modal = document.getElementById("derivation-modal");
   if (modal) {
     modal.style.display = "none";
-    document.body.style.overflow = ""; // Restore background scrolling
   }
 }
 
@@ -2733,6 +2736,191 @@ function getClientFallbackDerivation(cat, taskType, result, dq) {
   return defaults[cat] || defaults["risk_score"];
 }
 
+// ==========================================================================
+// 10. FULL-PAGE MATHEMATICAL PROOFS & CALCULATION ENGINE (TAB 9)
+// ==========================================================================
+let currentMathPageCategory = "risk_score";
+
+function switchMathPageCategory(category) {
+  currentMathPageCategory = category;
+  const tabs = document.querySelectorAll("#page-math-tabs .derivation-tab-btn");
+  tabs.forEach(btn => {
+    btn.classList.toggle("active", btn.getAttribute("data-metric") === category);
+  });
+  renderMathDerivationsPage(category);
+}
+
+function renderMathDerivationsPage(category = "risk_score") {
+  const container = document.getElementById("math-page-content");
+  if (!container) return;
+
+  const derivations = appState.analysis?.result?.derivations || {};
+  const taskType = appState.analysis?.task_type || appState.analysis?.result?.task_type || "classification";
+  const result = appState.analysis?.result || {};
+  const dq = appState.analysis?.data_quality || {};
+
+  const categories = [
+    "risk_score",
+    "target_profile",
+    "model_performance",
+    "generalization",
+    "cross_validation",
+    "features",
+    "data_quality",
+    "confidence_score",
+    "error_analysis"
+  ];
+
+  const targetCats = category === "all" ? categories : [category];
+
+  let html = "";
+
+  targetCats.forEach((cat, idx) => {
+    let data = derivations[cat];
+    if (cat === "features") {
+      if (data && typeof data === "object" && !data.title) {
+        const firstKey = Object.keys(data)[0];
+        data = firstKey ? data[firstKey] : null;
+      }
+    }
+    if (!data || Object.keys(data).length === 0) {
+      data = getClientFallbackDerivation(cat, taskType, result, dq);
+    }
+
+    // Render LaTeX math using KaTeX if available
+    let mathDisplayHtml = "";
+    if (window.katex && data.formula_latex) {
+      try {
+        const rendered = window.katex.renderToString(data.formula_latex, {
+          displayMode: true,
+          throwOnError: false
+        });
+        mathDisplayHtml = `<div class="math-katex-container" style="padding: 16px 14px; background: var(--bg-subtle); border-radius: var(--radius-sm); margin: 10px 0; font-size: 1.15rem; overflow-x: auto; text-align: center;">${rendered}</div>`;
+      } catch (e) {
+        mathDisplayHtml = `<div class="math-formula-box">${escapeHtml(data.formula_text || data.formula_latex)}</div>`;
+      }
+    } else {
+      mathDisplayHtml = `<div class="math-formula-box">${escapeHtml(data.formula_text || data.formula_latex || '')}</div>`;
+    }
+
+    html += `
+      <div class="card" style="padding: 24px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 16px;">
+          <div>
+            <div style="font-size: 0.76rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px;">
+              Subsystem Proof #${idx + 1}
+            </div>
+            <h3 style="margin: 2px 0 0 0; font-size: 1.25rem; font-weight: 800; color: var(--text-main);">
+              ${escapeHtml(data.title || 'Mathematical Derivation')}
+            </h3>
+          </div>
+          <span class="badge badge-primary" style="font-size: 0.8rem; padding: 6px 12px;">${escapeHtml(data.unit_or_range || 'Deterministic Range')}</span>
+        </div>
+
+        <!-- Formula Equation Card -->
+        <div class="math-formula-card" style="margin-bottom: 16px;">
+          <div class="math-formula-header">
+            <span class="math-formula-title">Theoretical Formulation &amp; Mathematical Definition</span>
+            <span style="font-size: 0.72rem; color: var(--text-muted); font-family: var(--font-mono);">FORMAL DEFINITION</span>
+          </div>
+          ${mathDisplayHtml}
+          ${data.formula_text ? `<div style="font-size: 0.82rem; color: var(--text-muted); font-family: var(--font-mono); margin-top: 6px;">Plain Text Formula: <code>${escapeHtml(data.formula_text)}</code></div>` : ''}
+        </div>
+
+        <!-- Variable Definitions Table -->
+        ${renderVariablesTable(data.variables)}
+
+        <!-- Step-by-Step Arithmetic Calculation -->
+        <div class="card" style="padding: 18px; background: var(--bg-surface); margin-top: 16px;">
+          <div style="font-weight: 700; font-size: 1rem; margin-bottom: 10px; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+            <span>🔢</span> Step-by-Step Numerical Trace (Substituted Dataset Values)
+          </div>
+          <div class="math-steps-list">
+            ${(data.calculation_steps || []).map(step => `<div class="math-step-item">${escapeHtml(step)}</div>`).join('')}
+          </div>
+        </div>
+
+        <!-- Output Result & Statistical Interpretation -->
+        <div style="display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 16px;">
+          <div class="card" style="padding: 16px; background: var(--bg-surface); display: flex; justify-content: space-between; align-items: center; border-left: 4px solid var(--primary);">
+            <span style="font-size: 0.9rem; font-weight: 700; color: var(--text-main);">Final Computed Output Value:</span>
+            <span style="font-weight: 800; font-size: 1.15rem; color: var(--primary); font-family: var(--font-mono);">${escapeHtml(String(data.output_value || ''))}</span>
+          </div>
+
+          <div class="math-interpretation-box">
+            <span style="font-size: 1.3rem;">💡</span>
+            <div>
+              <div style="font-weight: 700; font-size: 0.92rem; margin-bottom: 3px;">Diagnostic &amp; Statistical Interpretation</div>
+              <div>${escapeHtml(data.interpretation || 'Observation reflects empirical patterns calculated deterministically on the dataset.')}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
+function downloadMathAuditReport() {
+  const derivations = appState.analysis?.result?.derivations || {};
+  const taskType = appState.analysis?.task_type || appState.analysis?.result?.task_type || "classification";
+  const result = appState.analysis?.result || {};
+  const dq = appState.analysis?.data_quality || {};
+
+  let md = `# AI Model Root-Cause Analyzer: Mathematical Derivations & Proofs\n\n`;
+  md += `Generated: ${new Date().toISOString()}\n`;
+  md += `Dataset: ${appState.dataset?.filename || 'Active Dataset'}\n`;
+  md += `Task Type: ${taskType}\n\n`;
+  md += `=================================================================\n\n`;
+
+  const categories = [
+    "risk_score",
+    "target_profile",
+    "model_performance",
+    "generalization",
+    "cross_validation",
+    "features",
+    "data_quality",
+    "confidence_score",
+    "error_analysis"
+  ];
+
+  categories.forEach((cat, idx) => {
+    let data = derivations[cat];
+    if (cat === "features" && data && typeof data === "object" && !data.title) {
+      const firstKey = Object.keys(data)[0];
+      data = firstKey ? data[firstKey] : null;
+    }
+    if (!data || Object.keys(data).length === 0) {
+      data = getClientFallbackDerivation(cat, taskType, result, dq);
+    }
+
+    md += `## ${idx + 1}. ${data.title}\n\n`;
+    md += `### Formula\n\`\`\`\n${data.formula_text}\n\`\`\`\n\n`;
+    if (data.formula_latex) {
+      md += `**LaTeX Formulation:**\n$$${data.formula_latex}$$\n\n`;
+    }
+    md += `### Substituted Arithmetic Steps\n`;
+    (data.calculation_steps || []).forEach(step => {
+      md += `- ${step}\n`;
+    });
+    md += `\n**Final Computed Value:** \`${data.output_value}\`\n\n`;
+    md += `**Interpretation:** ${data.interpretation}\n\n`;
+    md += `---\n\n`;
+  });
+
+  const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "mathematical_proofs_and_derivations.md";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // Window global exports
 window.initGoogleAuth = initGoogleAuth;
 window.openAuthModal = openAuthModal;
@@ -2745,5 +2933,8 @@ window.showNotificationToast = showNotificationToast;
 window.openDerivationModal = openDerivationModal;
 window.closeDerivationModal = closeDerivationModal;
 window.switchDerivationCategory = switchDerivationCategory;
+window.renderMathDerivationsPage = renderMathDerivationsPage;
+window.switchMathPageCategory = switchMathPageCategory;
+window.downloadMathAuditReport = downloadMathAuditReport;
 
 
