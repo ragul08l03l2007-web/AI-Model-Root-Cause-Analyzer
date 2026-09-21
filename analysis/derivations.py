@@ -64,19 +64,21 @@ class DerivationEngine:
     def derive_risk_score(cls, risk: Dict[str, Any], result: Dict[str, Any]) -> Dict[str, Any]:
         final_score = int(risk.get("score", result.get("risk_score", 15)))
         breakdown = risk.get("breakdown", {})
-        p_perf = float(breakdown.get("performance_gap", 0))
-        p_gen = float(breakdown.get("generalization_gap", 0))
-        p_dist = float(breakdown.get("distribution_risk", 0))
+        p_perf = float(breakdown.get("performance_deficit", breakdown.get("performance_gap", 0)))
+        p_gen = float(breakdown.get("generalization_stability", breakdown.get("generalization_gap", 0)))
+        p_dist = float(breakdown.get("error_disparity", breakdown.get("distribution_risk", 0)))
         p_dq = float(breakdown.get("data_integrity", 0))
+
+        raw_sum = 5.0 + p_perf + p_gen + p_dist + p_dq
 
         steps = [
             f"1. Base Baseline Floor: S_base = 5.0 (guaranteed diagnostic baseline)",
-            f"2. Subsystem 1: Performance Deficit Penalty (Max 35.0): P_perf = {p_perf:.1f} pts",
-            f"3. Subsystem 2: Generalization Drop Penalty (Max 30.0): P_gen = {p_gen:.1f} pts",
-            f"4. Subsystem 3: Target Imbalance & Leakage Penalty (Max 25.0): P_dist = {p_dist:.1f} pts",
-            f"5. Subsystem 4: Data Quality & Hygiene Penalty (Max 25.0): P_integrity = {p_dq:.1f} pts",
-            f"6. Summation: Raw_Risk = 5.0 + {p_perf:.1f} + {p_gen:.1f} + {p_dist:.1f} + {p_dq:.1f} = {5.0 + p_perf + p_gen + p_dist + p_dq:.1f}",
-            f"7. Boundary Clamping: Final_Risk = min(100, max(5, round({5.0 + p_perf + p_gen + p_dist + p_dq:.1f}))) = {final_score}/100",
+            f"2. Subsystem 1: Performance Deficit Penalty (Max 30.0): P_perf = {p_perf:.1f} pts",
+            f"3. Subsystem 2: Generalization & Fold Variance Penalty (Max 25.0): P_gen = {p_gen:.1f} pts",
+            f"4. Subsystem 3: Class Disparity & Failure Concentration Penalty (Max 20.0): P_disparity = {p_dist:.1f} pts",
+            f"5. Subsystem 4: Data Quality, Leakage & Sample Constraint Penalty (Max 25.0): P_integrity = {p_dq:.1f} pts",
+            f"6. Summation: Raw_Risk = 5.0 + {p_perf:.1f} + {p_gen:.1f} + {p_dist:.1f} + {p_dq:.1f} = {raw_sum:.1f}",
+            f"7. Boundary Clamping: Final_Risk = min(100, max(5, round({raw_sum:.1f}))) = {final_score}/100",
         ]
 
         if final_score >= 65:
@@ -89,14 +91,14 @@ class DerivationEngine:
         return {
             "title": "Overall Production Risk Score",
             "metric_key": "risk_score",
-            "formula_latex": r"\text{Risk Score} = \min\left(100, \max\left(5, 5 + P_{\text{perf}} + P_{\text{gen}} + P_{\text{dist}} + P_{\text{integrity}}\right)\right)",
-            "formula_text": "Risk Score = min(100, max(5, 5.0 + P_perf + P_gen + P_dist + P_integrity))",
+            "formula_latex": r"\text{Risk Score} = \min\left(100, \max\left(5, \text{round}\left(5.0 + P_{\text{perf}} + P_{\text{gen}} + P_{\text{disparity}} + P_{\text{integrity}}\right)\right)\right)",
+            "formula_text": "Risk Score = min(100, max(5, round(5.0 + P_perf + P_gen + P_disparity + P_integrity)))",
             "variables": {
                 "S_base": {"desc": "Baseline diagnostic floor", "val": 5.0},
-                "P_perf": {"desc": "Holdout partition performance deficit penalty", "val": p_perf, "max": 35.0},
-                "P_gen": {"desc": "Train vs Test / CV generalization gap penalty", "val": p_gen, "max": 30.0},
-                "P_dist": {"desc": "Class imbalance & target leakage penalty", "val": p_dist, "max": 25.0},
-                "P_integrity": {"desc": "Missing values, duplicate rows & small sample penalty", "val": p_dq, "max": 25.0},
+                "P_perf": {"desc": "Holdout partition performance deficit penalty", "val": p_perf, "max": 30.0},
+                "P_gen": {"desc": "Train vs Test / CV generalization gap penalty", "val": p_gen, "max": 25.0},
+                "P_disparity": {"desc": "Class recall disparity / subgroup residual concentration penalty", "val": p_dist, "max": 20.0},
+                "P_integrity": {"desc": "Leakage, missing values, duplicates & sample size constraint penalty", "val": p_dq, "max": 25.0},
             },
             "calculation_steps": steps,
             "output_value": f"{final_score} / 100 ({risk.get('level', 'LOW')} RISK)",
