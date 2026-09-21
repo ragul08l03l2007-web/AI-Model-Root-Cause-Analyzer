@@ -99,8 +99,82 @@ def run_tests():
         assert status == 200
         print("[OK] All download endpoints (summary.csv, analysis.json, fix_pipeline.py) verified")
 
-        # 7. Test SEO Endpoints: Sitemap & Robots.txt
-        print("\n--- 7. Testing Sitemap & Robots.txt Endpoints ---")
+        # 7. Test Google Auth & Cloud Vault Endpoints
+        print("\n--- 7. Testing Google Auth & Cloud Vault Endpoints ---")
+        
+        # 7a. Auth with Google
+        auth_payload = {
+            "email": "tester@gmail.com",
+            "name": "Diagnostic Tester",
+            "picture": "https://lh3.googleusercontent.com/a/default-user"
+        }
+        status, headers, body = http_post_json(f"{base_url}/api/auth/google", auth_payload)
+        assert status == 200, f"Expected 200, got {status}"
+        auth_res = json.loads(body.decode("utf-8"))
+        assert auth_res.get("status") == "success"
+        assert auth_res["user"]["email"] == "tester@gmail.com"
+        print(f"[OK] Authenticated user: {auth_res['user']['name']} ({auth_res['user']['email']})")
+
+        # 7b. Save Session to Cloud Vault
+        save_payload = {
+            "user_id": "tester@gmail.com",
+            "session_name": "Test Diagnostic Run #1",
+            "filename": "random_test_dataset.csv",
+            "target": "churn",
+            "mode": "classification",
+            "task_type": "classification",
+            "rows": 250,
+            "columns": ["age", "tenure", "balance", "churn"],
+            "risk_score": 78,
+            "risk_level": "CRITICAL",
+            "result": res_json["result"],
+            "data_quality": res_json.get("data_quality", {}),
+            "visualizations": res_json.get("visualizations", {})
+        }
+        status, headers, body = http_post_json(f"{base_url}/api/user/save-session", save_payload)
+        assert status == 200, f"Expected 200, got {status}"
+        save_res = json.loads(body.decode("utf-8"))
+        assert save_res.get("status") == "success"
+        saved_session_id = save_res.get("session_id")
+        assert saved_session_id is not None
+        print(f"[OK] Saved session to Cloud Vault with ID: {saved_session_id}")
+
+        # 7c. List Saved Sessions
+        status, headers, body = http_get(f"{base_url}/api/user/sessions?user_id=tester@gmail.com")
+        assert status == 200, f"Expected 200, got {status}"
+        list_res = json.loads(body.decode("utf-8"))
+        assert list_res.get("status") == "success"
+        assert len(list_res.get("sessions", [])) >= 1
+        found = any(s["session_id"] == saved_session_id for s in list_res["sessions"])
+        assert found, "Saved session not found in user list"
+        print(f"[OK] Fetched {len(list_res['sessions'])} sessions for tester@gmail.com")
+
+        # 7d. Reload Saved Session
+        load_payload = {
+            "user_id": "tester@gmail.com",
+            "session_id": saved_session_id
+        }
+        status, headers, body = http_post_json(f"{base_url}/api/user/load-session", load_payload)
+        assert status == 200, f"Expected 200, got {status}"
+        load_res = json.loads(body.decode("utf-8"))
+        assert load_res.get("status") == "success"
+        assert load_res["session"]["session_name"] == "Test Diagnostic Run #1"
+        assert load_res["session"]["risk_score"] == 78
+        print(f"[OK] Successfully loaded saved session: '{load_res['session']['session_name']}' with Risk: {load_res['session']['risk_score']}/100")
+
+        # 7e. Delete Saved Session
+        del_payload = {
+            "user_id": "tester@gmail.com",
+            "session_id": saved_session_id
+        }
+        status, headers, body = http_post_json(f"{base_url}/api/user/delete-session", del_payload)
+        assert status == 200, f"Expected 200, got {status}"
+        del_res = json.loads(body.decode("utf-8"))
+        assert del_res.get("status") == "success"
+        print(f"[OK] Successfully deleted session {saved_session_id}")
+
+        # 8. Test SEO Endpoints: Sitemap & Robots.txt
+        print("\n--- 8. Testing Sitemap & Robots.txt Endpoints ---")
         import xml.etree.ElementTree as ET
 
         # GET /sitemap.xml

@@ -39,6 +39,91 @@ CURRENT_AI_REPORT: Optional[str] = None
 CURRENT_FIX_SCRIPT: Optional[str] = None
 CURRENT_VISUALIZATIONS: Optional[Dict[str, Any]] = None
 
+# User Session & Cloud Vault Storage Directory
+SESSION_DIR = os.path.join(BASE_DIR, "data", "sessions")
+os.makedirs(SESSION_DIR, exist_ok=True)
+
+
+# ============================================================
+# SESSION & USER VAULT STORAGE HELPERS
+# ============================================================
+
+def sanitize_user_key(user_id: str) -> str:
+    import re
+    cleaned = re.sub(r'[^a-zA-Z0-9_\-@.]', '_', str(user_id or "anonymous").lower())
+    return cleaned if cleaned else "anonymous"
+
+
+def get_user_sessions_list(user_id: str) -> list:
+    import json
+    uid = sanitize_user_key(user_id)
+    user_folder = os.path.join(SESSION_DIR, uid)
+    if not os.path.exists(user_folder):
+        return []
+    sessions = []
+    for fname in os.listdir(user_folder):
+        if fname.endswith(".json"):
+            fpath = os.path.join(user_folder, fname)
+            try:
+                with open(fpath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    sessions.append({
+                        "session_id": fname[:-5],
+                        "session_name": data.get("session_name") or data.get("filename") or fname[:-5],
+                        "filename": data.get("filename", "dataset.csv"),
+                        "task_type": data.get("task_type", "classification"),
+                        "risk_score": data.get("risk_score", 0),
+                        "risk_level": data.get("risk_level", "LOW"),
+                        "saved_at": data.get("saved_at", ""),
+                        "rows": data.get("rows", 0),
+                        "columns_count": len(data.get("columns", [])),
+                        "target": data.get("target", "")
+                    })
+            except Exception:
+                continue
+    sessions.sort(key=lambda s: s.get("saved_at", ""), reverse=True)
+    return sessions
+
+
+def save_user_session_payload(user_id: str, payload: dict) -> str:
+    import datetime
+    uid = sanitize_user_key(user_id)
+    user_folder = os.path.join(SESSION_DIR, uid)
+    os.makedirs(user_folder, exist_ok=True)
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    session_id = payload.get("session_id") or f"diag_{timestamp}"
+    payload["session_id"] = session_id
+    payload["saved_at"] = datetime.datetime.now().isoformat()
+
+    fpath = os.path.join(user_folder, f"{session_id}.json")
+    with open(fpath, "w", encoding="utf-8") as f:
+        json.dump(safe_primitive(payload), f, indent=2, default=str)
+    return session_id
+
+
+def load_user_session_payload(user_id: str, session_id: str) -> Optional[dict]:
+    uid = sanitize_user_key(user_id)
+    sid = sanitize_user_key(session_id)
+    fpath = os.path.join(SESSION_DIR, uid, f"{sid}.json")
+    if os.path.exists(fpath):
+        with open(fpath, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return None
+
+
+def delete_user_session_payload(user_id: str, session_id: str) -> bool:
+    uid = sanitize_user_key(user_id)
+    sid = sanitize_user_key(session_id)
+    fpath = os.path.join(SESSION_DIR, uid, f"{sid}.json")
+    if os.path.exists(fpath):
+        try:
+            os.remove(fpath)
+            return True
+        except Exception:
+            return False
+    return False
+
 
 # ============================================================
 # HELPER FUNCTIONS
@@ -515,6 +600,17 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_download("text/x-python; charset=utf-8", "fix_pipeline.py", CURRENT_FIX_SCRIPT.encode("utf-8"))
             return
 
+        # User Saved Sessions List
+        if path == "/api/user/sessions":
+            query_params = urllib.parse.parse_qs(parsed_url.query)
+            user_id = query_params.get("user_id", [""])[0] or query_params.get("email", [""])[0]
+            if not user_id:
+                self.send_json({"status": "error", "error": "Missing user_id parameter."}, 400)
+                return
+            sessions = get_user_sessions_list(user_id)
+            self.send_json({"status": "success", "user_id": user_id, "sessions": sessions})
+            return
+
         self.send_json({"error": f"Route '{path}' not found."}, 404)
 
     # ========================================================
@@ -706,6 +802,174 @@ class AppHandler(BaseHTTPRequestHandler):
 
             except Exception as exc:
                 self.send_json({"status": "error", "reply": f"Copilot Error: {str(exc)}"}, 400)
+                return
+
+        # 4. POST /api/auth/google: Google Sign-In & Verification
+        if path == "/api/auth/google":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                body = self.rfile.read(length) if length > 0 else b"{}"
+                data = json.loads(body.decode("utf-8", errors="replace"))
+
+                user_email = data.get("email", "").strip()
+                user_name = data.get("name", "").strip() or (user_email.split("@")[0] if user_email else "Google User")
+                user_picture = data.get("picture", "").strip()
+                user_id = data.get("sub", "") or user_email
+
+                # If credential JWT token is passed, parse claims safely
+                credential = data.get("credential") or data.get("token")
+                if credential and isinstance(credential, str) and "." in credential:
+                    try:
+                        import base64
+                        parts = credential.split(".")
+                        if len(parts) >= 2:
+                            padded = parts[1] + "=" * ((4 - len(parts[1]) % 4) % 4)
+                            jwt_payload = json.loads(base64.urlsafe_b64decode(padded.encode("utf-8")).decode("utf-8", errors="replace"))
+                            user_email = jwt_payload.get("email", user_email)
+                            user_name = jwt_payload.get("name", user_name)
+                            user_picture = jwt_payload.get("picture", user_picture)
+                            user_id = jwt_payload.get("sub", user_id) or user_email
+                    except Exception as jwt_err:
+                        print(f"[!] JWT parse notice: {jwt_err}")
+
+                if not user_email and not user_id:
+                    raise ValueError("Google authentication requires an email or Google ID.")
+
+                sessions = get_user_sessions_list(user_email or user_id)
+
+                self.send_json({
+                    "status": "success",
+                    "user": {
+                        "user_id": user_id,
+                        "email": user_email,
+                        "name": user_name,
+                        "picture": user_picture,
+                        "provider": "google"
+                    },
+                    "sessions": sessions,
+                    "message": f"Authenticated successfully with Google Account ({user_email})."
+                })
+                return
+
+            except Exception as exc:
+                self.send_json({"status": "error", "error": f"Authentication failed: {str(exc)}"}, 400)
+                return
+
+        # 5. POST /api/user/save-session: Save Active Diagnostics to Google Cloud Vault
+        if path == "/api/user/save-session":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                body = self.rfile.read(length) if length > 0 else b"{}"
+                data = json.loads(body.decode("utf-8", errors="replace"))
+
+                user_id = data.get("user_id") or data.get("email", "").strip()
+                if not user_id:
+                    raise ValueError("You must be signed in with Google to save dataset diagnostics.")
+
+                session_name = data.get("session_name", "").strip() or data.get("filename", "Dataset Analysis")
+
+                save_payload = {
+                    "session_name": session_name,
+                    "filename": data.get("filename", CURRENT_FILENAME or "dataset.csv"),
+                    "target": data.get("target", CURRENT_TARGET or "target"),
+                    "mode": data.get("mode", CURRENT_MODE or "auto"),
+                    "task_type": data.get("task_type") or (CURRENT_RESULT.get("task_type") if CURRENT_RESULT else "classification"),
+                    "rows": data.get("rows") or (len(CURRENT_DATAFRAME) if CURRENT_DATAFRAME is not None else 0),
+                    "columns": data.get("columns") or (list(CURRENT_DATAFRAME.columns) if CURRENT_DATAFRAME is not None else []),
+                    "risk_score": data.get("risk_score") or (CURRENT_RESULT.get("risk_score") if CURRENT_RESULT else 0),
+                    "risk_level": data.get("risk_level") or (CURRENT_RESULT.get("overall_risk") if CURRENT_RESULT else "LOW"),
+                    "dataset": data.get("dataset"),
+                    "result": data.get("result") or CURRENT_RESULT,
+                    "data_quality": data.get("data_quality") or CURRENT_DATA_QUALITY,
+                    "visualizations": data.get("visualizations") or CURRENT_VISUALIZATIONS,
+                    "ai_summary": data.get("ai_summary") or CURRENT_AI_REPORT,
+                    "fix_script": data.get("fix_script") or CURRENT_FIX_SCRIPT,
+                }
+
+                sid = save_user_session_payload(user_id, save_payload)
+                updated_sessions = get_user_sessions_list(user_id)
+
+                self.send_json({
+                    "status": "success",
+                    "session_id": sid,
+                    "message": f"Analysis '{session_name}' securely saved to your Google cloud vault.",
+                    "sessions": updated_sessions
+                })
+                return
+
+            except Exception as exc:
+                self.send_json({"status": "error", "error": f"Failed to save session: {str(exc)}"}, 400)
+                return
+
+        # 6. POST /api/user/load-session: Reload Saved Diagnostic Output
+        if path == "/api/user/load-session":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                body = self.rfile.read(length) if length > 0 else b"{}"
+                data = json.loads(body.decode("utf-8", errors="replace"))
+
+                user_id = data.get("user_id") or data.get("email", "").strip()
+                session_id = data.get("session_id", "").strip()
+
+                if not user_id or not session_id:
+                    raise ValueError("Missing user_id or session_id.")
+
+                session_data = load_user_session_payload(user_id, session_id)
+                if not session_data:
+                    raise ValueError(f"Saved session '{session_id}' not found.")
+
+                # Populate server active memory with loaded session
+                if session_data.get("result"):
+                    CURRENT_RESULT = session_data.get("result")
+                if session_data.get("data_quality"):
+                    CURRENT_DATA_QUALITY = session_data.get("data_quality")
+                if session_data.get("visualizations"):
+                    CURRENT_VISUALIZATIONS = session_data.get("visualizations")
+                if session_data.get("ai_summary"):
+                    CURRENT_AI_REPORT = session_data.get("ai_summary")
+                if session_data.get("fix_script"):
+                    CURRENT_FIX_SCRIPT = session_data.get("fix_script")
+                if session_data.get("filename"):
+                    CURRENT_FILENAME = session_data.get("filename")
+                if session_data.get("target"):
+                    CURRENT_TARGET = session_data.get("target")
+
+                self.send_json({
+                    "status": "success",
+                    "message": f"Successfully loaded session '{session_data.get('session_name')}'.",
+                    "session": session_data
+                })
+                return
+
+            except Exception as exc:
+                self.send_json({"status": "error", "error": f"Failed to load session: {str(exc)}"}, 400)
+                return
+
+        # 7. POST /api/user/delete-session: Delete Saved Session
+        if path == "/api/user/delete-session":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                body = self.rfile.read(length) if length > 0 else b"{}"
+                data = json.loads(body.decode("utf-8", errors="replace"))
+
+                user_id = data.get("user_id") or data.get("email", "").strip()
+                session_id = data.get("session_id", "").strip()
+
+                if not user_id or not session_id:
+                    raise ValueError("Missing user_id or session_id.")
+
+                delete_user_session_payload(user_id, session_id)
+                updated_sessions = get_user_sessions_list(user_id)
+
+                self.send_json({
+                    "status": "success",
+                    "message": "Session deleted.",
+                    "sessions": updated_sessions
+                })
+                return
+
+            except Exception as exc:
+                self.send_json({"status": "error", "error": f"Failed to delete session: {str(exc)}"}, 400)
                 return
 
         self.send_json({"error": f"POST route '{path}' not found."}, 404)

@@ -42,6 +42,8 @@
 
   <!-- Modern App Stylesheet -->
   <link rel="stylesheet" href="styles.css">
+  <!-- Google Identity Services (GSI) SDK for Real Google Sign-In -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <!-- KaTeX for Rich Mathematical Formula & Proof Rendering -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
@@ -353,6 +355,35 @@
         </div>
       </div>
 
+      <!-- Cloud Diagnostic Vault (Saved Google Cloud Sessions) -->
+      <div class="cloud-vault-section" id="cloud-vault-section">
+        <div class="cloud-vault-header">
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.25rem;">☁️</span>
+              <h3 style="font-size: 1.1rem; font-weight: 700; margin: 0;">Google Cloud Diagnostic Vault</h3>
+              <span class="badge badge-primary" id="vault-count-badge">0 Saved Sessions</span>
+            </div>
+            <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">
+              Your saved dataset runs, multi-model tournament evaluations, and root-cause evidence graphs.
+            </p>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button id="btn-vault-save-active" class="btn btn-outline btn-sm" onclick="saveActiveSessionToCloud()" style="display: none;">
+              <span>💾 Save Active Analysis</span>
+            </button>
+            <button class="btn btn-outline btn-sm" onclick="refreshUserSessions()">
+              <span>🔄 Refresh Vault</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Dynamic Vault Container (Locked / Empty / Sessions Grid) -->
+        <div id="cloud-vault-container">
+          <!-- Populated dynamically via renderSavedSessionsVault() in app.js -->
+        </div>
+      </div>
+
       <!-- Page Navigation Footer -->
       <div class="page-nav-footer" id="nav-footer-dataset" style="display: none;">
         <span style="font-size: 0.85rem; color: var(--text-muted);">Step 1 of 8: Dataset Ingestion</span>
@@ -380,15 +411,18 @@
             <h2 class="section-title">Diagnostic Health &amp; Risk Dashboard</h2>
             <p class="section-desc">Real-time synthesis of model reliability, risk score drivers, and primary failure hypotheses.</p>
           </div>
-          <div style="display: flex; gap: 8px;">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <button class="btn btn-primary btn-sm" onclick="saveActiveSessionToCloud()" title="Save this analysis and dataset output to your Google account" style="display: flex; align-items: center; gap: 6px;">
+              <span>☁️ Save to Google Cloud</span>
+            </button>
             <button class="btn btn-outline btn-sm" onclick="downloadFile('summary.csv')">Export Summary CSV</button>
-            <button class="btn btn-primary btn-sm" onclick="switchTab('ai-explainer')">View AI Fix Script →</button>
+            <button class="btn btn-outline btn-sm" onclick="switchTab('ai-explainer')">AI Fix Script →</button>
           </div>
         </div>
 
-        <!-- 4 Stat Scorecards -->
+        <!-- 4 Stat Scorecards (Executive Zone 1) -->
         <div class="grid-4">
-          <div class="stat-card">
+          <div class="stat-card stat-risk">
             <div class="stat-label">
               <span>Operational Risk</span>
               <span class="badge badge-critical" id="stat-risk-badge">CRITICAL</span>
@@ -397,7 +431,7 @@
             <div class="stat-sub" id="stat-risk-sub">Analyzing vulnerability...</div>
           </div>
 
-          <div class="stat-card">
+          <div class="stat-card stat-champion">
             <div class="stat-label">
               <span>Champion Architecture</span>
               <span class="badge badge-success">SELECTED</span>
@@ -406,7 +440,7 @@
             <div class="stat-sub" id="stat-champion-sub">Highest cross-validation score</div>
           </div>
 
-          <div class="stat-card">
+          <div class="stat-card stat-metric">
             <div class="stat-label">
               <span id="stat-metric-label">Validation Metric</span>
               <span class="badge badge-primary">TEST SPLIT</span>
@@ -415,7 +449,7 @@
             <div class="stat-sub" id="stat-eval-sub">Balanced accuracy</div>
           </div>
 
-          <div class="stat-card">
+          <div class="stat-card stat-health">
             <div class="stat-label">
               <span>Data Matrix Health</span>
               <span class="badge badge-success" id="stat-health-badge">CLEAN</span>
@@ -426,11 +460,11 @@
         </div>
 
         <!-- Dynamic Diagnostic Warnings & Risk Alerts Section -->
-        <div id="dashboard-warnings-container" style="margin-top: 16px; margin-bottom: 16px;">
+        <div id="dashboard-warnings-container" style="margin-top: 16px; margin-bottom: 24px;">
           <!-- Dynamically populated via renderWarnings() -->
         </div>
 
-        <!-- Charts Grid (Risk Gauge + Domain Breakdown) -->
+        <!-- Charts Grid (Risk Gauge + Domain Breakdown - Executive Zone 2) -->
         <div class="grid-2">
           <div class="chart-card">
             <div class="chart-header">
@@ -440,7 +474,7 @@
                 <span class="badge badge-primary">Plotly Gauge</span>
               </div>
             </div>
-            <div id="plotly-risk-gauge" class="plotly-container" style="min-height: 260px;"></div>
+            <div id="plotly-risk-gauge" class="plotly-container" style="min-height: 340px;"></div>
           </div>
 
           <div class="chart-card">
@@ -451,7 +485,7 @@
                 <span class="badge badge-primary">Plotly Bar</span>
               </div>
             </div>
-            <div id="plotly-risk-breakdown" class="plotly-container" style="min-height: 260px;"></div>
+            <div id="plotly-risk-breakdown" class="plotly-container" style="min-height: 340px;"></div>
           </div>
         </div>
 

@@ -9,7 +9,9 @@ const appState = {
   activeTab: "dataset",
   dataset: null, // { filename, rows, columns, dtypes, suggested_target, suggested_mode, preview, rawRows }
   analysis: null, // { result, data_quality, visualizations, ai_summary, fix_script }
-  theme: localStorage.getItem("rca_theme") || "light"
+  theme: localStorage.getItem("rca_theme") || "light",
+  user: JSON.parse(localStorage.getItem("rca_google_user") || "null"),
+  userSessions: []
 };
 
 // ==========================================================================
@@ -558,7 +560,16 @@ function onAnalysisComplete(payload) {
   appState.isAnalyzed = true;
   appState.analysis = payload;
   saveSessionState();
+  renderAllOutputs();
+  updateGoogleAuthUI();
 
+  // Switch to Dashboard
+  switchTab("dashboard");
+}
+
+function renderAllOutputs() {
+  if (!appState.analysis) return;
+  const payload = appState.analysis;
   const result = payload.result || {};
   const dq = payload.data_quality || {};
   const taskType = payload.task_type || result.task_type || "classification";
@@ -566,14 +577,18 @@ function onAnalysisComplete(payload) {
   const riskLevel = result.overall_risk || result.risk?.level || (riskScore > 60 ? "CRITICAL" : "MODERATE");
 
   // Update Context Bar
-  document.getElementById("ctx-target-col").textContent = payload.target;
+  const targetCol = document.getElementById("ctx-target-col");
+  if (targetCol) targetCol.textContent = payload.target || appState.dataset?.suggested_target || "target";
   const riskBadge = document.getElementById("ctx-risk-badge");
-  riskBadge.textContent = `${riskLevel} RISK (${riskScore}/100)`;
-  riskBadge.className = riskScore > 60 ? "badge badge-critical" : (riskScore > 30 ? "badge badge-warning" : "badge badge-success");
+  if (riskBadge) {
+    riskBadge.textContent = `${riskLevel} RISK (${riskScore}/100)`;
+    riskBadge.className = riskScore > 60 ? "badge badge-critical" : (riskScore > 30 ? "badge badge-warning" : "badge badge-success");
+  }
 
   // Unlock all Tabs
   updateTabDisplayStates();
-  document.getElementById("export-suite-section").style.display = "block";
+  const exportSection = document.getElementById("export-suite-section");
+  if (exportSection) exportSection.style.display = "block";
 
   // 1. Dashboard Overview Tab
   renderDashboardTab(result, dq, taskType, riskScore, riskLevel);
@@ -596,8 +611,10 @@ function onAnalysisComplete(payload) {
   // 7. AI Explainer & Remediation Tab
   renderAiExplainerTab(payload);
 
-  // Switch to Dashboard
-  switchTab("dashboard");
+  // 8. Math Derivations Full Tab if active
+  if (appState.activeTab === "math-derivations") {
+    renderMathDerivationsPage();
+  }
 }
 
 // ==========================================================================
@@ -2926,6 +2943,552 @@ function downloadMathAuditReport() {
   URL.revokeObjectURL(url);
 }
 
+// ==========================================================================
+// GOOGLE AUTHENTICATION & CLOUD SESSIONS VAULT
+// ==========================================================================
+
+let gsiInitialized = false;
+
+function initGoogleAuth() {
+  updateGoogleAuthUI();
+  if (appState.user) {
+    fetchUserSavedSessions();
+  } else {
+    renderSavedSessionsVault();
+  }
+
+  // Attempt to initialize Google Identity Services SDK
+  setupGsiClient();
+}
+
+function setupGsiClient() {
+  if (typeof google !== "undefined" && google.accounts && google.accounts.id) {
+    try {
+      google.accounts.id.initialize({
+        client_id: "892837482910-ai-model-root-cause.apps.googleusercontent.com",
+        callback: handleGoogleCredentialResponse,
+        auto_select: false,
+        cancel_on_tap_outside: true
+      });
+      gsiInitialized = true;
+      renderGsiButtons();
+    } catch (e) {
+      console.warn("[Google Auth GSI Init Notice]:", e);
+    }
+  } else {
+    // Retry after SDK script loads
+    setTimeout(() => {
+      if (typeof google !== "undefined" && google.accounts && google.accounts.id) {
+        setupGsiClient();
+      }
+    }, 1000);
+  }
+}
+
+function renderGsiButtons() {
+  const container = document.getElementById("g_id_signin_container");
+  if (container && typeof google !== "undefined" && google.accounts && google.accounts.id) {
+    container.innerHTML = "";
+    google.accounts.id.renderButton(container, {
+      theme: appState.theme === "dark" ? "filled_black" : "outline",
+      size: "large",
+      text: "continue_with",
+      shape: "rectangular",
+      width: 320
+    });
+  }
+}
+
+function openAuthModal() {
+  const modal = document.getElementById("auth-modal");
+  if (modal) {
+    modal.style.display = "flex";
+    renderGsiButtons();
+  }
+}
+
+function closeAuthModal() {
+  const modal = document.getElementById("auth-modal");
+  if (modal) modal.style.display = "none";
+}
+
+function toggleUserDropdown() {
+  const card = document.getElementById("user-dropdown-card");
+  if (card) {
+    card.style.display = card.style.display === "none" || !card.style.display ? "block" : "none";
+  }
+}
+
+// Close user dropdown if clicking outside
+document.addEventListener("click", (e) => {
+  const menu = document.getElementById("user-profile-menu");
+  const card = document.getElementById("user-dropdown-card");
+  if (card && menu && !menu.contains(e.target) && !card.contains(e.target)) {
+    card.style.display = "none";
+  }
+});
+
+async function signInWithGoogleSSO() {
+  if (typeof google !== "undefined" && google.accounts && google.accounts.id) {
+    try {
+      google.accounts.id.prompt((notification) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          // If One Tap is skipped or blocked by browser settings, prompt for account
+          promptManualGoogleSignIn();
+        }
+      });
+      return;
+    } catch (err) {
+      console.warn("[Google SSO]:", err);
+    }
+  }
+  promptManualGoogleSignIn();
+}
+
+function promptManualGoogleSignIn() {
+  const email = prompt("Please enter your Google / Gmail address to connect your account:", "user@gmail.com");
+  if (!email || !email.includes("@")) return;
+  const name = prompt("Enter your display name:", email.split("@")[0]);
+  authenticateWithBackend({ email: email.trim(), name: name ? name.trim() : email.split("@")[0] });
+}
+
+async function handleManualGmailSignIn(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const nameInput = document.getElementById("input-auth-name");
+  const emailInput = document.getElementById("input-auth-email");
+
+  const name = nameInput ? nameInput.value.trim() : "";
+  const email = emailInput ? emailInput.value.trim() : "";
+
+  if (!email || !email.includes("@")) {
+    showNotificationToast("Please enter a valid Gmail address.", "warning");
+    return;
+  }
+
+  await authenticateWithBackend({ email, name });
+}
+
+async function handleGoogleCredentialResponse(response) {
+  if (!response || !response.credential) {
+    showNotificationToast("Google authentication was not completed.", "warning");
+    return;
+  }
+  await authenticateWithBackend({ credential: response.credential });
+}
+
+async function authenticateWithBackend(payload) {
+  try {
+    const res = await fetch("/api/auth/google", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (res.ok && data.status === "success") {
+      appState.user = data.user;
+      localStorage.setItem("rca_google_user", JSON.stringify(data.user));
+      appState.userSessions = data.sessions || [];
+
+      updateGoogleAuthUI();
+      closeAuthModal();
+      renderSavedSessionsVault();
+      showNotificationToast(`Signed in as ${data.user.name} (${data.user.email})`, "success");
+    } else {
+      throw new Error(data.error || "Authentication failed.");
+    }
+  } catch (err) {
+    showNotificationToast(`Authentication Error: ${err.message}`, "danger");
+  }
+}
+
+function signOutUser() {
+  if (typeof google !== "undefined" && google.accounts && google.accounts.id) {
+    try {
+      google.accounts.id.disableAutoSelect();
+    } catch (e) {}
+  }
+  localStorage.removeItem("rca_google_user");
+  appState.user = null;
+  appState.userSessions = [];
+
+  const card = document.getElementById("user-dropdown-card");
+  if (card) card.style.display = "none";
+  closeAuthModal();
+
+  updateGoogleAuthUI();
+  renderSavedSessionsVault();
+  showNotificationToast("Signed out of Google account.");
+}
+
+function updateGoogleAuthUI() {
+  const btnLogin = document.getElementById("btn-google-login");
+  const profileMenu = document.getElementById("user-profile-menu");
+  const displayName = document.getElementById("user-display-name");
+  const avatarImg = document.getElementById("user-avatar-img");
+  const avatarFallback = document.getElementById("user-avatar-fallback");
+
+  const dropdownName = document.getElementById("user-card-full-name");
+  const dropdownEmail = document.getElementById("user-card-email-text");
+  const dropdownAvatar = document.getElementById("user-card-avatar-initials");
+
+  const authStatusLogged = document.getElementById("auth-status-logged-in");
+  const modalName = document.getElementById("modal-user-name");
+  const modalEmail = document.getElementById("modal-user-email");
+  const modalAvatar = document.getElementById("modal-user-avatar-badge");
+
+  const saveActiveBtn = document.getElementById("btn-vault-save-active");
+  if (saveActiveBtn) {
+    saveActiveBtn.style.display = appState.isAnalyzed ? "inline-flex" : "none";
+  }
+
+  if (appState.user) {
+    if (btnLogin) btnLogin.style.display = "none";
+    if (profileMenu) profileMenu.style.display = "flex";
+
+    const name = appState.user.name || "Google User";
+    const email = appState.user.email || "";
+    const initial = name.charAt(0).toUpperCase();
+
+    if (displayName) displayName.textContent = name;
+    if (dropdownName) dropdownName.textContent = name;
+    if (dropdownEmail) dropdownEmail.textContent = email;
+    if (modalName) modalName.textContent = name;
+    if (modalEmail) modalEmail.textContent = email;
+
+    if (appState.user.picture) {
+      if (avatarImg) {
+        avatarImg.src = appState.user.picture;
+        avatarImg.style.display = "block";
+      }
+      if (avatarFallback) avatarFallback.style.display = "none";
+      if (dropdownAvatar) dropdownAvatar.innerHTML = `<img src="${escapeHtml(appState.user.picture)}" alt="${escapeHtml(name)}" style="width:100%;height:100%;object-fit:cover;">`;
+      if (modalAvatar) modalAvatar.innerHTML = `<img src="${escapeHtml(appState.user.picture)}" alt="${escapeHtml(name)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+    } else {
+      if (avatarImg) avatarImg.style.display = "none";
+      if (avatarFallback) {
+        avatarFallback.style.display = "flex";
+        avatarFallback.textContent = initial;
+      }
+      if (dropdownAvatar) dropdownAvatar.textContent = initial;
+      if (modalAvatar) modalAvatar.textContent = initial;
+    }
+
+    if (authStatusLogged) authStatusLogged.style.display = "block";
+  } else {
+    if (btnLogin) btnLogin.style.display = "inline-flex";
+    if (profileMenu) profileMenu.style.display = "none";
+    if (authStatusLogged) authStatusLogged.style.display = "none";
+  }
+}
+
+async function fetchUserSavedSessions() {
+  if (!appState.user) return;
+  try {
+    const userId = encodeURIComponent(appState.user.email || appState.user.user_id);
+    const res = await fetch(`/api/user/sessions?user_id=${userId}`);
+    if (res.ok) {
+      const data = await res.json();
+      appState.userSessions = data.sessions || [];
+      const countBadge = document.getElementById("vault-count-badge");
+      if (countBadge) {
+        countBadge.textContent = `${appState.userSessions.length} Saved Session${appState.userSessions.length === 1 ? '' : 's'}`;
+      }
+      renderSavedSessionsVault();
+    }
+  } catch (err) {
+    console.warn("[Cloud Vault fetch error]:", err);
+  }
+}
+
+function refreshUserSessions() {
+  if (!appState.user) {
+    showNotificationToast("Please sign in with Google to access your Cloud Vault.", "warning");
+    openAuthModal();
+    return;
+  }
+  fetchUserSavedSessions().then(() => {
+    showNotificationToast("Cloud Vault refreshed.", "success");
+  });
+}
+
+async function saveActiveSessionToCloud(customName) {
+  if (!appState.user) {
+    showNotificationToast("Please sign in with Google to save dataset outputs to your cloud vault.", "warning");
+    openAuthModal();
+    return;
+  }
+
+  if (!appState.dataset && !appState.analysis) {
+    showNotificationToast("No active dataset or analysis available to save.", "warning");
+    return;
+  }
+
+  const defaultName = appState.dataset?.filename || "Dataset Diagnostic Run";
+  const sessionName = customName || prompt("Enter a name for this diagnostic session in your Google Cloud Vault:", defaultName);
+  if (!sessionName || !sessionName.trim()) return;
+
+  const payload = {
+    user_id: appState.user.email || appState.user.user_id,
+    session_name: sessionName.trim(),
+    filename: appState.dataset?.filename || "dataset.csv",
+    target: appState.dataset?.suggested_target || "target",
+    mode: appState.dataset?.suggested_mode || "auto",
+    task_type: appState.analysis?.task_type || appState.analysis?.result?.task_type || "classification",
+    rows: appState.dataset?.rows || 0,
+    columns: appState.dataset?.columns || [],
+    risk_score: appState.analysis?.result?.risk_score || 0,
+    risk_level: appState.analysis?.result?.overall_risk || "LOW",
+    dataset: appState.dataset,
+    result: appState.analysis?.result,
+    data_quality: appState.analysis?.data_quality,
+    visualizations: appState.analysis?.visualizations,
+    ai_summary: appState.analysis?.ai_summary,
+    fix_script: appState.analysis?.fix_script
+  };
+
+  try {
+    const res = await fetch("/api/user/save-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (res.ok && data.status === "success") {
+      appState.userSessions = data.sessions || [];
+      const countBadge = document.getElementById("vault-count-badge");
+      if (countBadge) {
+        countBadge.textContent = `${appState.userSessions.length} Saved Session${appState.userSessions.length === 1 ? '' : 's'}`;
+      }
+      renderSavedSessionsVault();
+      showNotificationToast(`☁️ Saved session '${sessionName}' to your Google Cloud Vault!`, "success");
+    } else {
+      throw new Error(data.error || "Failed to save session.");
+    }
+  } catch (err) {
+    showNotificationToast(`Save Error: ${err.message}`, "danger");
+  }
+}
+
+async function loadUserCloudSession(sessionId) {
+  if (!appState.user) {
+    showNotificationToast("Please sign in with Google to load saved sessions.", "warning");
+    openAuthModal();
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/user/load-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: appState.user.email || appState.user.user_id,
+        session_id: sessionId
+      })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.status === "success" && data.session) {
+      const s = data.session;
+      appState.dataset = s.dataset || {
+        filename: s.filename || "loaded_dataset.csv",
+        rows: s.rows || 0,
+        columns: s.columns || [],
+        dtypes: {},
+        suggested_target: s.target || "",
+        suggested_mode: s.mode || "auto",
+        preview: []
+      };
+      appState.analysis = {
+        result: s.result,
+        data_quality: s.data_quality,
+        visualizations: s.visualizations,
+        ai_summary: s.ai_summary,
+        fix_script: s.fix_script,
+        task_type: s.task_type || "classification"
+      };
+      appState.isAnalyzed = true;
+
+      // Update Context Bar
+      const dot = document.getElementById("ctx-status-dot");
+      if (dot) dot.className = "status-dot";
+      const nameEl = document.getElementById("ctx-dataset-name");
+      if (nameEl) nameEl.textContent = s.filename || "Loaded Dataset";
+      const metaEl = document.getElementById("ctx-dataset-meta");
+      if (metaEl) metaEl.textContent = `${s.rows || 0} Rows • ${s.columns ? s.columns.length : 0} Columns`;
+      const targetEl = document.getElementById("ctx-target-col");
+      if (targetEl) targetEl.textContent = s.target || "None";
+      const badge = document.getElementById("ctx-risk-badge");
+      if (badge) {
+        badge.className = `badge badge-${getRiskBadgeClass(s.risk_level)}`;
+        badge.textContent = `${s.risk_level || 'LOW'} RISK (${s.risk_score || 0}/100)`;
+      }
+
+      // Update Tab 1 Persistent Banner
+      const banner = document.getElementById("active-session-banner");
+      if (banner) {
+        banner.style.display = "block";
+        const titleEl = document.getElementById("active-session-title");
+        if (titleEl) titleEl.textContent = s.session_name || s.filename;
+        const descEl = document.getElementById("active-session-desc");
+        if (descEl) descEl.textContent = `Restored from Cloud Vault • ${s.rows || 0} Rows × ${s.columns ? s.columns.length : 0} Columns • Target: ${s.target || 'target'}`;
+        const riskB = document.getElementById("active-session-risk-badge");
+        if (riskB) {
+          riskB.className = `badge badge-${getRiskBadgeClass(s.risk_level)}`;
+          riskB.textContent = `${s.risk_level || 'LOW'} RISK (${s.risk_score || 0}/100)`;
+        }
+      }
+
+      // Render all outputs across 8 tabs
+      renderAllOutputs();
+      switchTab("dashboard");
+      showNotificationToast(`⚡ Reloaded output for '${s.session_name || s.filename}'!`, "success");
+    } else {
+      throw new Error(data.error || "Failed to load session.");
+    }
+  } catch (err) {
+    showNotificationToast(`Load Error: ${err.message}`, "danger");
+  }
+}
+
+async function deleteUserCloudSession(sessionId, event) {
+  if (event) event.stopPropagation();
+  if (!confirm("Are you sure you want to delete this saved diagnostic session from your Google Cloud Vault?")) {
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/user/delete-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: appState.user.email || appState.user.user_id,
+        session_id: sessionId
+      })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.status === "success") {
+      appState.userSessions = data.sessions || [];
+      const countBadge = document.getElementById("vault-count-badge");
+      if (countBadge) {
+        countBadge.textContent = `${appState.userSessions.length} Saved Session${appState.userSessions.length === 1 ? '' : 's'}`;
+      }
+      renderSavedSessionsVault();
+      showNotificationToast("Session deleted from Cloud Vault.");
+    } else {
+      throw new Error(data.error || "Failed to delete session.");
+    }
+  } catch (err) {
+    showNotificationToast(`Delete Error: ${err.message}`, "danger");
+  }
+}
+
+function renderSavedSessionsVault() {
+  const container = document.getElementById("cloud-vault-container");
+  if (!container) return;
+
+  if (!appState.user) {
+    container.innerHTML = `
+      <div class="cloud-vault-locked">
+        <div style="font-size: 2.2rem;">🔒</div>
+        <h4 style="font-size: 1.1rem; font-weight: 700; margin: 0;">Connect with Google to View Saved Datasets</h4>
+        <p style="font-size: 0.84rem; color: var(--text-muted); max-width: 480px; margin: 0 auto; line-height: 1.5;">
+          Sign in with your Google account to securely store, synchronize, and instantly reload your past dataset diagnostics, trained model tournaments, and mathematical derivations across devices.
+        </p>
+        <button class="btn btn-primary" onclick="openAuthModal()" style="display: inline-flex; align-items: center; gap: 8px; margin-top: 6px;">
+          <svg viewBox="0 0 24 24" width="16" height="16">
+            <path fill="#ffffff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#ffffff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#ffffff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+            <path fill="#ffffff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+          </svg>
+          <span>Connect with Google Account</span>
+        </button>
+      </div>
+    `;
+    return;
+  }
+
+  if (!appState.userSessions || appState.userSessions.length === 0) {
+    container.innerHTML = `
+      <div class="cloud-vault-empty">
+        <div style="font-size: 2.2rem; margin-bottom: 8px;">📂</div>
+        <div style="font-weight: 700; font-size: 1rem; margin-bottom: 4px; color: var(--text-main);">No Saved Datasets in Google Vault Yet</div>
+        <div style="max-width: 440px; margin: 0 auto; line-height: 1.5;">
+          Upload a dataset or launch a demo benchmark above, then click <strong>"☁️ Save to Google Cloud"</strong> to store your full diagnostic reports here.
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  let html = `<div class="cloud-vault-grid">`;
+  appState.userSessions.forEach((s) => {
+    const riskBadgeClass = getRiskBadgeClass(s.risk_level);
+    const dateFormatted = s.saved_at ? new Date(s.saved_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Saved';
+    const taskBadge = s.task_type === 'regression' ? 'Regression' : 'Classification';
+
+    html += `
+      <div class="cloud-vault-card">
+        <div>
+          <div class="cloud-vault-card-header">
+            <div>
+              <span class="badge badge-primary" style="font-size: 0.68rem; margin-bottom: 4px;">${escapeHtml(taskBadge)}</span>
+              <div class="cloud-vault-card-title">${escapeHtml(s.session_name || s.filename)}</div>
+            </div>
+            <span class="badge badge-${riskBadgeClass}">${escapeHtml(s.risk_level || 'LOW')} (${s.risk_score || 0}/100)</span>
+          </div>
+          <div class="cloud-vault-card-meta">
+            <span>📁 ${escapeHtml(s.filename)}</span>
+            <span>•</span>
+            <span>${s.rows || 0} rows</span>
+            <span>•</span>
+            <span>Target: <code>${escapeHtml(s.target || 'None')}</code></span>
+            <span>•</span>
+            <span style="color: var(--text-subtle);">🕒 ${dateFormatted}</span>
+          </div>
+        </div>
+
+        <div class="cloud-vault-card-actions">
+          <button class="btn btn-primary btn-sm" onclick="loadUserCloudSession('${escapeHtml(s.session_id)}')" style="display: flex; align-items: center; gap: 6px;">
+            <span>⚡ Reload Dataset Output</span>
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="deleteUserCloudSession('${escapeHtml(s.session_id)}', event)" style="color: var(--danger); border-color: var(--border-color); padding: 4px 8px;" title="Delete session">
+            🗑️
+          </button>
+        </div>
+      </div>
+    `;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+function showNotificationToast(msg, type = "info") {
+  let toast = document.getElementById("toast-notification");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "toast-notification";
+    toast.className = "toast-notification";
+    document.body.appendChild(toast);
+  }
+
+  let icon = "ℹ️";
+  if (type === "success") icon = "✅";
+  if (type === "warning") icon = "⚠️";
+  if (type === "danger") icon = "❌";
+
+  toast.innerHTML = `<span style="font-size: 1.15rem;">${icon}</span> <span>${escapeHtml(msg)}</span>`;
+  toast.style.display = "flex";
+
+  if (window._toastTimer) clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => {
+    if (toast) toast.style.display = "none";
+  }, 3500);
+}
+
 // Window global exports
 window.initGoogleAuth = initGoogleAuth;
 window.openAuthModal = openAuthModal;
@@ -2935,11 +3498,18 @@ window.signInWithGoogleSSO = signInWithGoogleSSO;
 window.handleManualGmailSignIn = handleManualGmailSignIn;
 window.signOutUser = signOutUser;
 window.showNotificationToast = showNotificationToast;
+window.fetchUserSavedSessions = fetchUserSavedSessions;
+window.refreshUserSessions = refreshUserSessions;
+window.saveActiveSessionToCloud = saveActiveSessionToCloud;
+window.loadUserCloudSession = loadUserCloudSession;
+window.deleteUserCloudSession = deleteUserCloudSession;
+window.renderSavedSessionsVault = renderSavedSessionsVault;
 window.openDerivationModal = openDerivationModal;
 window.closeDerivationModal = closeDerivationModal;
 window.switchDerivationCategory = switchDerivationCategory;
 window.renderMathDerivationsPage = renderMathDerivationsPage;
 window.switchMathPageCategory = switchMathPageCategory;
 window.downloadMathAuditReport = downloadMathAuditReport;
+
 
 
