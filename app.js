@@ -2386,6 +2386,11 @@ function openDerivationModal(category = "risk_score", subKey = null) {
 
   renderDerivationsContent();
   modal.style.display = "flex";
+
+  const body = document.getElementById("derivation-modal-body");
+  if (body) {
+    body.scrollTop = 0;
+  }
 }
 
 function closeDerivationModal() {

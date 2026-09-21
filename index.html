@@ -1427,6 +1427,8 @@
         </div>
       </div>
     </div>
+  </div>
+
   <!-- Mathematical Derivation & Calculation Inspector Modal -->
   <div id="derivation-modal" class="modal-overlay" style="display: none;" onclick="if(event.target === this) closeDerivationModal()">
     <div class="modal-card" style="max-width: 820px; max-height: 90vh; display: flex; flex-direction: column;">
@@ -1440,7 +1442,12 @@
             <span style="font-size: 0.76rem; color: var(--text-muted);" id="derivation-modal-subtitle">Formal formulas, step-by-step arithmetic, and substituted active dataset values</span>
           </div>
         </div>
-        <button class="btn-icon" onclick="closeDerivationModal()" style="background:none; border:none; font-size: 1.25rem; cursor: pointer; color: var(--text-muted);" title="Close">✕</button>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button class="btn btn-outline btn-sm" onclick="closeDerivationModal(); switchTab('math-derivations'); switchMathPageCategory(currentDerivationCategory);" title="Open in full-page tab mode" style="padding: 4px 10px; font-size: 0.74rem;">
+            📑 Full-Page Tab ↗
+          </button>
+          <button class="btn-icon" onclick="closeDerivationModal()" style="background:none; border:none; font-size: 1.25rem; cursor: pointer; color: var(--text-muted);" title="Close">✕</button>
+        </div>
       </div>
 
       <!-- Quick Category Nav Tabs inside Modal -->
@@ -1460,9 +1467,19 @@
         <!-- Dynamically rendered via app.js -->
       </div>
 
-      <div class="modal-footer" style="padding: 12px 24px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--bg-surface);">
+      <div class="modal-footer" style="padding: 12px 24px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--bg-surface); flex-wrap: wrap; gap: 10px;">
         <span style="font-size: 0.76rem; color: var(--text-muted);">Deterministic mathematical proofs computed directly from active dataset observations</span>
-        <button class="btn btn-outline btn-sm" onclick="closeDerivationModal()">Close Inspector</button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-outline btn-sm" onclick="closeDerivationModal(); switchTab('math-derivations'); switchMathPageCategory(currentDerivationCategory);">
+            📑 View Full Page Tab
+          </button>
+          <button class="btn btn-primary btn-sm" onclick="downloadMathAuditReport()">
+            📥 Export Audit (.md)
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="closeDerivationModal()">
+            Close
+          </button>
+        </div>
       </div>
     </div>
   </div>
